@@ -25,4 +25,9 @@ add_definitions(-DFCITX_GETTEXT_DOMAIN=\"${GETTEXT_DOMAIN}\")
 
 add_subdirectory(src)
 
+include(CTest)
+if(BUILD_TESTING)
+    add_subdirectory(tests)
+endif()
+
 feature_summary(WHAT ALL INCLUDE_QUIET_PACKAGES FATAL_ON_MISSING_REQUIRED_PACKAGES)
