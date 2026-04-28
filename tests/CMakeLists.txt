@@ -29,3 +29,13 @@ target_compile_definitions(keymap_test PRIVATE
     P2_KEYMAP_PATH="${CMAKE_SOURCE_DIR}/keymaps/sinsebeolsik_p2.toml"
 )
 catch_discover_tests(keymap_test)
+
+add_executable(automaton_test automaton_test.cpp)
+target_link_libraries(automaton_test PRIVATE
+    sinsebeolsik-p2-core
+    Catch2::Catch2WithMain
+)
+target_compile_definitions(automaton_test PRIVATE
+    P2_KEYMAP_PATH="${CMAKE_SOURCE_DIR}/keymaps/sinsebeolsik_p2.toml"
+)
+catch_discover_tests(automaton_test)

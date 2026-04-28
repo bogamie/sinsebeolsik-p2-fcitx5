@@ -13,6 +13,7 @@ FetchContent_MakeAvailable(tomlplusplus)
 add_library(sinsebeolsik-p2-core STATIC
     jamo.cpp
     keymap.cpp
+    automaton.cpp
 )
 
 target_link_libraries(sinsebeolsik-p2-core
