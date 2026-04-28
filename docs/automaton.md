@@ -100,8 +100,10 @@ Plus 2 옛한글-toggle-only entries (○→〮, ×→〯) handled separately vi
 
 **`combination`** — compound jamo lookup, sorted for binary search. Each entry is `((a, b), result)` packing a 64-bit key. Source: `hangeul_combination_table_default[]` in `keyboard_table_combination.js` (lines 6–32). **26 entries**:
 - Choseong doubles (5): ㄲ ㄸ ㅃ ㅆ ㅉ
-- Jungseong compounds (9): ㅘ ㅙ ㅚ ㅝ ㅞ ㅟ ㅢ ㆎ ᆢ
+- Jungseong compounds (9): ㅘ ㅙ ㅚ ㅝ ㅞ ㅟ ㅢ ㆎ(아래아-ㅣ) ᆢ(쌍아래아)
 - Jongseong compounds (12): ㄲ ㄳ ㄵ ㄶ ㄺ ㄻ ㄼ ㄽ ㄾ ㄿ ㅀ ㅄ
+
+(Glyphs ㆎ U+318E and ᆢ U+11A2 may render thin in some terminals; both are present in the source table.)
 
 **`jong_split`** — 12-entry decomposition table for compound 종성, used by 도깨비불 (§3.5). Maps a compound jong → `(keep, promote_cho)` where `keep` stays as the closing syllable's 종성 and `promote_cho` becomes the new syllable's 초성. Derived once at engine init from `combination` rules whose result is a JONG: for each `(jong_a, jong_b) → compound`, set `jong_split[compound] = (jong_a, jong_to_cho(jong_b))`. The `jong_to_cho` map is a fixed 14-entry consonant lookup (e.g., ㅅ받침 0x11BA → ㅅ초성 0x1109; ㄱ받침 0x11A8 → ㄱ초성 0x1100). This table is **separate** from `jong_prev` (the buffer slot used for backspace restoration) — the two roles must not be conflated.
 
@@ -192,7 +194,7 @@ The "attempt compound" branch and the "rewrite via galmadeuli" branch are mutual
 After reclassification we have `(code, cat)`. Apply standard 3-set rules:
 
 **`cat == CHO`**:
-- If `cur.jung || cur.jong`: commit current `cur`, start new with `cho = code`. (도깨비불 happens here when previous syllable had a 종성 — see §3.5.)
+- If `cur.jung || cur.jong`: commit current `cur`, start new with `cho = code`. (No 도깨비불 here — that fires only on JUNG input following a syllable with 종성; see §3.5.)
 - Else if `cur.cho` non-zero:
   - Try `combo = combination[(cur.cho, code)]`. If found: `cur.cho_prev = cur.cho; cur.cho = combo`.
   - Else: commit `cur`, start new with `cho = code`.
@@ -205,12 +207,13 @@ After reclassification we have `(code, cat)`. Apply standard 3-set rules:
   - Else: commit `cur`, start new with `jung = code` (bare-jung syllable; rendered via conjoining jamo, see §3.6).
 - Else: `cur.jung = code`.
 
-**`cat == JONG`**:
-- If `!cur.cho || !cur.jung`: invalid (no syllable to attach to). Per ohi.pat.im (line 1316), commit `cur`, start new with `jong = code`. The new syllable is "jong-only" — visually rendered with a filler 초성 (see §3.6) but lives in the buffer for the next event to potentially fix.
-- Else if `cur.jong` non-zero AND `!cur.jong_prev`:
+**`cat == JONG`** — explicit case discrimination, NO silent overwrite:
+- Case A: `!cur.cho || !cur.jung` (no syllable to attach to). Commit any partial `cur`, start new with `jong = code` (jong-only state, see §3.6). For legitimate P2 sequences this rarely fires — Layer 1 (§3.3) typically rewrites such inputs to JUNG via galmadeuli before reaching here.
+- Case B: `cur.jong == 0` (first 종성 of this syllable). Set `cur.jong = code`.
+- Case C: `cur.jong != 0 AND cur.jong_prev == 0` (single jong, attempt compound).
   - Try `combo = combination[(cur.jong, code)]`. If found: `cur.jong_prev = cur.jong; cur.jong = combo`.
-  - Else: commit `cur`, start new (도깨비불 — see §3.5).
-- Else: `cur.jong = code`.
+  - Else: no compound rule. Commit `cur`, start new with `jong = code` (jong-only state). Mirrors `ohi.js:1316–1317`.
+- Case D: `cur.jong != 0 AND cur.jong_prev != 0` (compound jong already formed). Commit `cur`, start new with `jong = code` (jong-only state). **Existing compound is NOT overwritten.** Mirrors `ohi.js:1311–1317` where `ohiQ[5]` non-zero forces the commit-and-restart branch.
 
 ### 3.5 도깨비불 (`apply_dokkaebibul`)
 
@@ -264,7 +267,9 @@ Worked example — `갑 + ㅏ` (simple jong, wholesale):
 
 **Bare-jung syllable** (`{cho=0, jung=v, jong=0}`): legitimate state when a vowel is typed in initial state. Hangul Syllables Block (가–힣) cannot represent it; preedit and commit use the conjoining jamo block (U+1161 etc.). Modern Wayland clients render these correctly. ohi.pat.im behaves the same.
 
-**Jong-only invariant** (`{cho=0, jung=0, jong≠0}`): **unreachable in legitimate P2 input**. Every 종성 key in the bundled keymap has a galmadeuli alternate (15 jung↔jong pairs cover every modern jong consonant), so Layer 1 (§3.3) rewrites a 종성 input to its jung alternate whenever the syllable lacks a 초성/중성 to attach to. The implementation enforces this with `assert(!(cur.jong && (!cur.cho || !cur.jung)))` after every `step()`. Falsified only by a malformed custom keymap; in that defensive path, the buffer renders as raw conjoining jamo. Unit tests verify the invariant holds for every P2 input sequence.
+**Jong-only state** (`{cho=0, jung=0, jong≠0}`): a transient state that arises when a 종성-default key cannot attach to the current syllable — produced by §3.4 Cases A/C/D. Rendered via the conjoining jamo block (U+11A8 etc.) in the preedit. ohi.pat.im behaves identically (`ohi.js:1316–1320` produces this exact state). The next input typically resolves it within one keystroke: if a vowel follows, the jong-only commits as a standalone 종성 jamo and the new vowel starts a fresh bare-jung syllable; if another consonant follows, the jong-only commits and the new consonant starts a fresh syllable.
+
+Earlier drafts of this document framed jong-only as an unreachable invariant. That was wrong: jong-only is reachable in legitimate input (e.g., `갈 + g` where ㄹ받침 cannot compound with ㄷ받침). The current design accepts it as a defensive transient state, matches ohi.pat.im, and pins the behavior with tests.
 
 **Claimed vs passthrough — single rule**: a `(keysym, shift_state)` pair is **claimed** if and only if it has a non-zero entry in the TOML `base_keymap`. Uniformly:
 - Jamo entries: enter the composition pipeline (Layers 1 and 2).
@@ -331,22 +336,46 @@ base_layout = "qwerty"
 # ... (94 entries)
 
 [galmadeuli]
-# Bidirectional pairs. Engine builds inverse automatically.
-pairs = [
-    [0x1106, 0x1173],  # ㅁ초성 ↔ ㅡ
-    [0x110E, 0x116E],  # ㅊ초성 ↔ ㅜ
-    [0x110F, 0x1169],  # ㅋ초성 ↔ ㅗ
-    [0x1111, 0x119E],  # ㅍ초성 ↔ ㆍ
-    [0x1161, 0x11C1],  # ㅏ ↔ ㅍ받침
-    # ... (all 19 pairs)
+# Two sections to match the directional structure of galmadeuli_3shin_p2[]
+# (see §2.3). The engine generates inverse entries ONLY for `bidirectional`.
+
+# 4 entries — one-way cho→jung. NO inverse generated (would conflict with
+# bidirectional jung↔jong entries; e.g. inverse of ㅡ→ㅁ초성 would shadow
+# the ㅡ↔ㄷ받침 pair).
+one_way = [
+    [0x1106, 0x1173],  # ㅁ초성 → ㅡ
+    [0x110E, 0x116E],  # ㅊ초성 → ㅜ
+    [0x110F, 0x1169],  # ㅋ초성 → ㅗ
+    [0x1111, 0x119E],  # ㅍ초성 → ㆍ
 ]
+
+# 15 entries — bidirectional jung↔jong. Engine inserts the inverse
+# automatically, yielding 30 directed lookups.
+bidirectional = [
+    [0x1161, 0x11C1],  # ㅏ ↔ ㅍ받침
+    [0x1162, 0x11B8],  # ㅐ ↔ ㅂ받침
+    [0x1163, 0x11AF],  # ㅑ ↔ ㄹ받침
+    [0x1164, 0x11BA],  # ㅒ ↔ ㅅ받침
+    [0x1165, 0x11C0],  # ㅓ ↔ ㅌ받침
+    [0x1166, 0x11A8],  # ㅔ ↔ ㄱ받침
+    [0x1167, 0x11BF],  # ㅕ ↔ ㅋ받침
+    [0x1168, 0x11AB],  # ㅖ ↔ ㄴ받침
+    [0x1169, 0x11BD],  # ㅗ ↔ ㅈ받침
+    [0x116D, 0x11BB],  # ㅛ ↔ ㅆ받침
+    [0x116E, 0x11BE],  # ㅜ ↔ ㅊ받침
+    [0x1172, 0x11BC],  # ㅠ ↔ ㅇ받침
+    [0x1173, 0x11AE],  # ㅡ ↔ ㄷ받침
+    [0x1175, 0x11C2],  # ㅣ ↔ ㅎ받침
+    [0x119E, 0x11B7],  # ㆍ ↔ ㅁ받침
+]
+# Total directed lookups: 4 + 30 = 34 (matches galmadeuli_3shin_p2[]).
 
 [combination]
 # (a, b) → c
 rules = [
     [0x1100, 0x1100, 0x1101],  # ㄱ + ㄱ = ㄲ (cho)
     [0x1169, 0x1161, 0x116A],  # ㅗ + ㅏ = ㅘ
-    # ... (all 28 rules)
+    # ... (all 26 rules)
 ]
 
 [options]
@@ -371,7 +400,7 @@ The pure automaton module is "done" when:
    - 도깨비불 with simple jong (one case per 14 modern single 종성 consonants, wholesale move) **and** compound jong (all 12 entries in `jong_split` table, split into keep + promote).
    - Mixed sequences (corpus in §4, expanded to ≥30 entries).
    - Modifier passthrough (Ctrl+C, Alt+Tab, plain unmapped keys) returns `consumed=false` and commits any pending syllable.
-   - **Jong-only invariant**: assert no test reaches `{cho=0, jung=0, jong≠0}` for any P2 input sequence.
+   - **Jong-only state coverage**: at least one test for each §3.4 JONG case (A/B/C/D), verifying no silent overwrite of compound jong and that jong-only renders as raw conjoining jamo.
 3. CI green on the feature branch.
 4. No fcitx5 wiring yet — that is M3.
 
