@@ -100,10 +100,17 @@ Plus 2 옛한글-toggle-only entries (○→〮, ×→〯) handled separately vi
 
 **`combination`** — compound jamo lookup, sorted for binary search. Each entry is `((a, b), result)` packing a 64-bit key. Source: `hangeul_combination_table_default[]` in `keyboard_table_combination.js` (lines 6–32). **26 entries**:
 - Choseong doubles (5): ㄲ ㄸ ㅃ ㅆ ㅉ
-- Jungseong compounds (9): ㅘ ㅙ ㅚ ㅝ ㅞ ㅟ ㅢ ㆎ(아래아-ㅣ) ᆢ(쌍아래아)
+- Jungseong compounds (9):
+  1. ㅘ (ㅗ+ㅏ, U+116A)
+  2. ㅙ (ㅗ+ㅐ, U+116B)
+  3. ㅚ (ㅗ+ㅣ, U+116C)
+  4. ㅝ (ㅜ+ㅓ, U+116F)
+  5. ㅞ (ㅜ+ㅔ, U+1170)
+  6. ㅟ (ㅜ+ㅣ, U+1171)
+  7. ㅢ (ㅡ+ㅣ, U+1174)
+  8. ㆎ (ㆍ+ㅣ, U+11A1)
+  9. ᆢ (ㆍ+ㆍ, U+11A2 — 쌍아래아)
 - Jongseong compounds (12): ㄲ ㄳ ㄵ ㄶ ㄺ ㄻ ㄼ ㄽ ㄾ ㄿ ㅀ ㅄ
-
-(Glyphs ㆎ U+318E and ᆢ U+11A2 may render thin in some terminals; both are present in the source table.)
 
 **`jong_split`** — 12-entry decomposition table for compound 종성, used by 도깨비불 (§3.5). Maps a compound jong → `(keep, promote_cho)` where `keep` stays as the closing syllable's 종성 and `promote_cho` becomes the new syllable's 초성. Derived once at engine init from `combination` rules whose result is a JONG: for each `(jong_a, jong_b) → compound`, set `jong_split[compound] = (jong_a, jong_to_cho(jong_b))`. The `jong_to_cho` map is a fixed 14-entry consonant lookup (e.g., ㅅ받침 0x11BA → ㅅ초성 0x1109; ㄱ받침 0x11A8 → ㄱ초성 0x1100). This table is **separate** from `jong_prev` (the buffer slot used for backspace restoration) — the two roles must not be conflated.
 
@@ -324,9 +331,13 @@ The keymap file `keymaps/sinsebeolsik_p2.toml` is the source of truth for which 
 ```toml
 [meta]
 name = "Sinsebeolsik P2"
-spec_version = "2018-04-10"
-spec_url = "http://pat.im/1136"
-base_layout = "qwerty"
+# pat.im/1136 covers two revisions: the 2016 layout and the 2018 symbol patch.
+# Split here so consumers can tell which axis a future bump touches.
+layout_revision = "2016-08-06"
+symbol_revision = "2018-04-10"
+scope          = "basic-p2"     # base layout only; ancient/extended modes are toggles below
+spec_url       = "http://pat.im/1136"
+base_layout    = "qwerty"
 
 [base_keymap]
 # Each entry: keysym (X11) → unshifted output, shifted output
@@ -379,8 +390,9 @@ rules = [
 ]
 
 [options]
-backspace_mode = "by_jamo"      # only valid value for v0.1
-ancient_hangul = false           # toggle reserved; flips 2 keys (U, Y) — v0.2
+backspace_mode    = "by_jamo"   # only valid value for v0.1
+ancient_hangul    = false       # toggle reserved; flips 2 keys (U, Y) — v0.2
+extended_symbols  = false       # toggle reserved; pat.im 확장 기호 layer — v0.2+
 ```
 
 The TOML is loaded at engine startup and never mutated at runtime.
