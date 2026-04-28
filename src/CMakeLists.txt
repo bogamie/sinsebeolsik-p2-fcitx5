@@ -54,3 +54,8 @@ install(TARGETS sinsebeolsik-p2
 
 install(FILES "${CMAKE_CURRENT_BINARY_DIR}/sinsebeolsik-p2.conf"
     DESTINATION "${FCITX_INSTALL_PKGDATADIR}/addon")
+
+# Keymap file. Resolved at runtime via StandardPath::PkgData, which
+# searches XDG_DATA_HOME → XDG_DATA_DIRS for a "sinsebeolsik-p2/" subdir.
+install(FILES "${CMAKE_SOURCE_DIR}/keymaps/sinsebeolsik_p2.toml"
+    DESTINATION "${FCITX_INSTALL_PKGDATADIR}/sinsebeolsik-p2")
