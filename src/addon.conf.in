@@ -1,0 +1,11 @@
+[Addon]
+Name=Sinsebeolsik P2
+Name[ko]=신세벌식 P2
+Comment=Sinsebeolsik P2 Hangul input method
+Comment[ko]=신세벌식 P2 한글 입력기
+Category=InputMethod
+Version=@PROJECT_VERSION@
+Type=SharedLibrary
+Library=libsinsebeolsik-p2
+OnRequest=False
+Configurable=False

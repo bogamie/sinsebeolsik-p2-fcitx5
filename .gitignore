@@ -1,0 +1,36 @@
+# Build artifacts
+build/
+build-*/
+*.o
+*.so
+*.so.*
+*.a
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+compile_commands.json
+install_manifest.txt
+CTestTestfile.cmake
+Testing/
+
+# Generated config
+src/sinsebeolsik-p2.conf
+
+# IDE / editor
+.vscode/
+.idea/
+.vs/
+*.swp
+*.swo
+*~
+.cache/
+.clangd/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Patches
+*.orig
+*.rej
