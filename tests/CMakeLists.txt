@@ -19,3 +19,13 @@ target_link_libraries(jamo_test PRIVATE
     Catch2::Catch2WithMain
 )
 catch_discover_tests(jamo_test)
+
+add_executable(keymap_test keymap_test.cpp)
+target_link_libraries(keymap_test PRIVATE
+    sinsebeolsik-p2-core
+    Catch2::Catch2WithMain
+)
+target_compile_definitions(keymap_test PRIVATE
+    P2_KEYMAP_PATH="${CMAKE_SOURCE_DIR}/keymaps/sinsebeolsik_p2.toml"
+)
+catch_discover_tests(keymap_test)

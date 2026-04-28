@@ -1,0 +1,212 @@
+# 신세벌식 P2 자판 (박경남 / pat.im).
+#
+# Source of truth — DO NOT modify without explicit instruction. Bit-for-bit
+# transcription of the reference implementation:
+#   - Base layout:  static/js/keyboard_table_hangeul.js K3_3shin_p2 (lines 2334-2436)
+#   - Galmadeuli:   static/js/keyboard_table_galmadeuli.js galmadeuli_3shin_p2 (lines 390-433)
+#   - Combination:  static/js/keyboard_table_combination.js hangeul_combination_table_default (lines 6-32)
+# from gitlab.com/3beol/3beol.gitlab.io @ master, == ohi.pat.im live.
+#
+# See docs/automaton.md §5 for the format spec.
+#
+# NOTE on TOML structure: `base_keymap = [...]` is a top-level key, so it
+# must precede every `[section]` header below. Once we enter `[meta]`,
+# every subsequent bare key becomes `meta.<key>` until the next header.
+
+# ---------------------------------------------------------------------------
+# Base keymap. Each entry: [ascii_code, output_codepoint].
+# `output = 0` means the key is not claimed (passthrough).
+# ASCII range 0x21..0x7E (94 keys total). Order is by ASCII code.
+# ---------------------------------------------------------------------------
+base_keymap = [
+    [0x21, 0x21],     # ! → !
+    [0x22, 0x2F],     # " → / (P2 idiom: shift+' is /)
+    [0x23, 0x23],     # # → #
+    [0x24, 0x24],     # $ → $
+    [0x25, 0x25],     # % → %
+    [0x26, 0x26],     # & → &
+    [0x27, 0x1110],   # ' → ㅌ초성
+    [0x28, 0x28],     # ( → (
+    [0x29, 0x29],     # ) → )
+    [0x2A, 0x2A],     # * → *
+    [0x2B, 0x2B],     # + → +
+    [0x2C, 0x2C],     # , → ,
+    [0x2D, 0x2D],     # - → -
+    [0x2E, 0x2E],     # . → .
+    [0x2F, 0x110F],   # / → ㅋ초성
+    [0x30, 0x30],     # 0 → 0
+    [0x31, 0x31],     # 1 → 1
+    [0x32, 0x32],     # 2 → 2
+    [0x33, 0x33],     # 3 → 3
+    [0x34, 0x34],     # 4 → 4
+    [0x35, 0x35],     # 5 → 5
+    [0x36, 0x36],     # 6 → 6
+    [0x37, 0x37],     # 7 → 7
+    [0x38, 0x38],     # 8 → 8
+    [0x39, 0x39],     # 9 → 9
+    [0x3A, 0x3A],     # : → :
+    [0x3B, 0x1107],   # ; → ㅂ초성
+    [0x3C, 0x3C],     # < → <
+    [0x3D, 0x3D],     # = → =
+    [0x3E, 0x3E],     # > → >
+    [0x3F, 0x3F],     # ? → ?
+    [0x40, 0x40],     # @ → @
+    [0x41, 0x1172],   # A → ㅠ (shift forces vowel)
+    [0x42, 0x116E],   # B → ㅜ
+    [0x43, 0x1166],   # C → ㅔ
+    [0x44, 0x1175],   # D → ㅣ
+    [0x45, 0x1162],   # E → ㅐ
+    [0x46, 0x1161],   # F → ㅏ
+    [0x47, 0x1173],   # G → ㅡ
+    [0x48, 0x25A1],   # H → □ (white square)
+    [0x49, 0x0000],   # I → (unclaimed; 2018 update removed shift+i = ㅡ)
+    [0x4A, 0x0027],   # J → ' (apostrophe — typographic)
+    [0x4B, 0x0022],   # K → " (double quote — typographic)
+    [0x4C, 0x00B7],   # L → · (middle dot, 가운뎃점)
+    [0x4D, 0x2026],   # M → … (horizontal ellipsis)
+    [0x4E, 0x2015],   # N → ― (horizontal bar, 줄표)
+    [0x4F, 0x0000],   # O → (unclaimed; 2018 update removed shift+o = ㅜ)
+    [0x50, 0x003B],   # P → ; (semicolon)
+    [0x51, 0x1164],   # Q → ㅒ
+    [0x52, 0x1165],   # R → ㅓ
+    [0x53, 0x1168],   # S → ㅖ
+    [0x54, 0x1167],   # T → ㅕ
+    [0x55, 0x25CB],   # U → ○ (white circle)
+    [0x56, 0x1169],   # V → ㅗ
+    [0x57, 0x1163],   # W → ㅑ
+    [0x58, 0x116D],   # X → ㅛ
+    [0x59, 0x00D7],   # Y → × (multiplication sign)
+    [0x5A, 0x119E],   # Z → ㆍ (아래아)
+    [0x5B, 0x5B],     # [ → [
+    [0x5C, 0x5C],     # \ → \
+    [0x5D, 0x5D],     # ] → ]
+    [0x5E, 0x5E],     # ^ → ^
+    [0x5F, 0x5F],     # _ → _
+    [0x60, 0x60],     # ` → `
+    [0x61, 0x11BC],   # a → ㅇ받침
+    [0x62, 0x11BE],   # b → ㅊ받침
+    [0x63, 0x11A8],   # c → ㄱ받침
+    [0x64, 0x11C2],   # d → ㅎ받침
+    [0x65, 0x11B8],   # e → ㅂ받침
+    [0x66, 0x11C1],   # f → ㅍ받침
+    [0x67, 0x11AE],   # g → ㄷ받침
+    [0x68, 0x1102],   # h → ㄴ초성
+    [0x69, 0x1106],   # i → ㅁ초성 (galmadeuli → ㅡ post-cho)
+    [0x6A, 0x110B],   # j → ㅇ초성
+    [0x6B, 0x1100],   # k → ㄱ초성
+    [0x6C, 0x110C],   # l → ㅈ초성
+    [0x6D, 0x1112],   # m → ㅎ초성
+    [0x6E, 0x1109],   # n → ㅅ초성
+    [0x6F, 0x110E],   # o → ㅊ초성 (galmadeuli → ㅜ post-cho)
+    [0x70, 0x1111],   # p → ㅍ초성 (galmadeuli → ㆍ post-cho)
+    [0x71, 0x11BA],   # q → ㅅ받침
+    [0x72, 0x11C0],   # r → ㅌ받침
+    [0x73, 0x11AB],   # s → ㄴ받침
+    [0x74, 0x11BF],   # t → ㅋ받침
+    [0x75, 0x1103],   # u → ㄷ초성
+    [0x76, 0x11BD],   # v → ㅈ받침
+    [0x77, 0x11AF],   # w → ㄹ받침
+    [0x78, 0x11BB],   # x → ㅆ받침
+    [0x79, 0x1105],   # y → ㄹ초성
+    [0x7A, 0x11B7],   # z → ㅁ받침
+    [0x7B, 0x7B],     # { → {
+    [0x7C, 0x7C],     # | → |
+    [0x7D, 0x7D],     # } → }
+    [0x7E, 0x7E],     # ~ → ~
+]
+
+
+[meta]
+name             = "Sinsebeolsik P2"
+layout_revision  = "2016-08-06"
+symbol_revision  = "2018-04-10"
+scope            = "basic-p2"      # base layout only; toggles below for extensions
+spec_url         = "http://pat.im/1136"
+base_layout      = "qwerty"
+
+
+# ---------------------------------------------------------------------------
+# 갈마들이 (alternation). `from → to` rewrite consulted by Layer 1 of the
+# automaton (docs/automaton.md §3.3).
+# ---------------------------------------------------------------------------
+
+[galmadeuli]
+
+# 4 entries. Cho → jung — the post-cho alternation that lets i/o//(slash)/p
+# act as compound-vowel virtual units. NO inverse generated (would shadow
+# the bidirectional jung↔jong below; e.g., inverting ㅡ→ㅁ초성 collides
+# with the established ㅡ↔ㄷ받침 pair).
+one_way = [
+    [0x1106, 0x1173],   # ㅁ초성 → ㅡ
+    [0x110E, 0x116E],   # ㅊ초성 → ㅜ
+    [0x110F, 0x1169],   # ㅋ초성 → ㅗ
+    [0x1111, 0x119E],   # ㅍ초성 → ㆍ
+]
+
+# 15 entries. Jung ↔ jong — the loader auto-generates the inverse for
+# 30 directed lookups total. Covers every modern jong consonant + ㆍ.
+bidirectional = [
+    [0x1161, 0x11C1],   # ㅏ ↔ ㅍ받침
+    [0x1162, 0x11B8],   # ㅐ ↔ ㅂ받침
+    [0x1163, 0x11AF],   # ㅑ ↔ ㄹ받침
+    [0x1164, 0x11BA],   # ㅒ ↔ ㅅ받침
+    [0x1165, 0x11C0],   # ㅓ ↔ ㅌ받침
+    [0x1166, 0x11A8],   # ㅔ ↔ ㄱ받침
+    [0x1167, 0x11BF],   # ㅕ ↔ ㅋ받침
+    [0x1168, 0x11AB],   # ㅖ ↔ ㄴ받침
+    [0x1169, 0x11BD],   # ㅗ ↔ ㅈ받침
+    [0x116D, 0x11BB],   # ㅛ ↔ ㅆ받침
+    [0x116E, 0x11BE],   # ㅜ ↔ ㅊ받침
+    [0x1172, 0x11BC],   # ㅠ ↔ ㅇ받침
+    [0x1173, 0x11AE],   # ㅡ ↔ ㄷ받침
+    [0x1175, 0x11C2],   # ㅣ ↔ ㅎ받침
+    [0x119E, 0x11B7],   # ㆍ ↔ ㅁ받침
+]
+
+
+# ---------------------------------------------------------------------------
+# Compound jamo. 26 rules: 5 cho doubles + 9 jung compounds + 12 jong
+# compounds. The jong_split decomposition table (docs §3.5) is auto-derived
+# from the JONG entries by the loader.
+# ---------------------------------------------------------------------------
+
+[combination]
+rules = [
+    # Choseong doubles (5)
+    [0x1100, 0x1100, 0x1101],   # ㄱ + ㄱ = ㄲ
+    [0x1103, 0x1103, 0x1104],   # ㄷ + ㄷ = ㄸ
+    [0x1107, 0x1107, 0x1108],   # ㅂ + ㅂ = ㅃ
+    [0x1109, 0x1109, 0x110A],   # ㅅ + ㅅ = ㅆ
+    [0x110C, 0x110C, 0x110D],   # ㅈ + ㅈ = ㅉ
+
+    # Jungseong compounds (9)
+    [0x1169, 0x1161, 0x116A],   # ㅗ + ㅏ = ㅘ
+    [0x1169, 0x1162, 0x116B],   # ㅗ + ㅐ = ㅙ
+    [0x1169, 0x1175, 0x116C],   # ㅗ + ㅣ = ㅚ
+    [0x116E, 0x1165, 0x116F],   # ㅜ + ㅓ = ㅝ
+    [0x116E, 0x1166, 0x1170],   # ㅜ + ㅔ = ㅞ
+    [0x116E, 0x1175, 0x1171],   # ㅜ + ㅣ = ㅟ
+    [0x1173, 0x1175, 0x1174],   # ㅡ + ㅣ = ㅢ
+    [0x119E, 0x1175, 0x11A1],   # ㆍ + ㅣ = ㆎ
+    [0x119E, 0x119E, 0x11A2],   # ㆍ + ㆍ = ᆢ (쌍아래아)
+
+    # Jongseong compounds (12)
+    [0x11A8, 0x11A8, 0x11A9],   # ㄱ받침 + ㄱ받침 = ㄲ받침
+    [0x11A8, 0x11BA, 0x11AA],   # ㄱ받침 + ㅅ받침 = ㄳ
+    [0x11AB, 0x11BD, 0x11AC],   # ㄴ받침 + ㅈ받침 = ㄵ
+    [0x11AB, 0x11C2, 0x11AD],   # ㄴ받침 + ㅎ받침 = ㄶ
+    [0x11AF, 0x11A8, 0x11B0],   # ㄹ받침 + ㄱ받침 = ㄺ
+    [0x11AF, 0x11B7, 0x11B1],   # ㄹ받침 + ㅁ받침 = ㄻ
+    [0x11AF, 0x11B8, 0x11B2],   # ㄹ받침 + ㅂ받침 = ㄼ
+    [0x11AF, 0x11BA, 0x11B3],   # ㄹ받침 + ㅅ받침 = ㄽ
+    [0x11AF, 0x11C0, 0x11B4],   # ㄹ받침 + ㅌ받침 = ㄾ
+    [0x11AF, 0x11C1, 0x11B5],   # ㄹ받침 + ㅍ받침 = ㄿ
+    [0x11AF, 0x11C2, 0x11B6],   # ㄹ받침 + ㅎ받침 = ㅀ
+    [0x11B8, 0x11BA, 0x11B9],   # ㅂ받침 + ㅅ받침 = ㅄ
+]
+
+
+[options]
+backspace_mode    = "by_jamo"   # only valid value for v0.1
+ancient_hangul    = false       # toggle reserved; flips shift+U/Y to 〮/〯 — v0.2
+extended_symbols  = false       # toggle reserved; pat.im 확장 기호 layer — v0.2+

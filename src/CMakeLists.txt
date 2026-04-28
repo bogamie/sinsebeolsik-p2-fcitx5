@@ -1,7 +1,22 @@
-# Pure-logic core: jamo, automaton (next), keymap loader (later).
+# toml++ — TOML parser for keymap files. Single-header, MIT, fast to fetch.
+include(FetchContent)
+FetchContent_Declare(
+    tomlplusplus
+    GIT_REPOSITORY https://github.com/marzer/tomlplusplus.git
+    GIT_TAG        v3.4.0
+    GIT_SHALLOW    TRUE
+)
+FetchContent_MakeAvailable(tomlplusplus)
+
+# Pure-logic core: jamo, keymap loader, automaton (next).
 # No fcitx5/fmt deps — unit-testable in isolation.
 add_library(sinsebeolsik-p2-core STATIC
     jamo.cpp
+    keymap.cpp
+)
+
+target_link_libraries(sinsebeolsik-p2-core
+    PUBLIC tomlplusplus::tomlplusplus
 )
 
 target_include_directories(sinsebeolsik-p2-core
