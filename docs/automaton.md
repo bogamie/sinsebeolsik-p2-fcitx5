@@ -89,16 +89,21 @@ Three tables are baked into the keymap TOML and loaded at engine start:
 
 **`base_keymap`** — `array<char32_t, 94>` indexed by `ascii - 0x21`. Direct ASCII → Unicode mapping (jamo or punctuation passthrough). Source: `K3_3shin_p2[]` in `keyboard_table_hangeul.js`.
 
-**`galmadeuli`** — bidirectional jamo↔jamo lookup, sorted for binary search. Each entry is `(from_code, to_code)`. Both directions are stored as separate entries (e.g., `ㅁ초성→ㅡ` AND `ㅡ→ㅁ초성`). Source: `galmadeuli_3shin_p2[]` in `keyboard_table_galmadeuli.js`.
+**`galmadeuli`** — directional jamo→jamo lookup, sorted for binary search. Each entry is `(from_code, to_code)`. Source: `galmadeuli_3shin_p2[]` in `keyboard_table_galmadeuli.js` (lines 390–433).
 
-For P2 the table has 34 entries (4 cho↔jung pairs, 15 jung↔jong pairs, with bidirectional duplicates).
+For P2 the table has **34 directed entries** organised in three sections:
+- 4 cho→jung mappings, **one-way** (i, o, /, p keys' choseong → vowel for the post-cho compound vowel mechanism): ㅁ→ㅡ, ㅊ→ㅜ, ㅋ→ㅗ, ㅍ→ㆍ.
+- 15 jung→jong mappings (each modern vowel's key → corresponding 종성 form).
+- 15 jong→jung mappings (the inverse of the previous, completing **bidirectional** jung↔jong pairs).
 
-**`combination`** — compound jamo lookup, sorted for binary search. Each entry is `((a, b), result)` packing a 64-bit key. Covers:
-- Choseong doubles: ㄲ ㄸ ㅃ ㅆ ㅉ
-- Jungseong compounds: ㅘ ㅙ ㅚ ㅝ ㅞ ㅟ ㅢ ㆎ ᆢ
-- Jongseong compounds: ㄲ ㄳ ㄵ ㄶ ㄺ ㄻ ㄼ ㄽ ㄾ ㄿ ㅀ ㅄ
+Plus 2 옛한글-toggle-only entries (○→〮, ×→〯) handled separately via `__change_to_yet`. Layer 1 (§3.3) consults this table at most once per keystroke; the choice of branch (apply rewrite vs keep base) depends on input category and current state.
 
-Source: `hangeul_combination_table_default[]` in `keyboard_table_combination.js`. 28 entries total.
+**`combination`** — compound jamo lookup, sorted for binary search. Each entry is `((a, b), result)` packing a 64-bit key. Source: `hangeul_combination_table_default[]` in `keyboard_table_combination.js` (lines 6–32). **26 entries**:
+- Choseong doubles (5): ㄲ ㄸ ㅃ ㅆ ㅉ
+- Jungseong compounds (9): ㅘ ㅙ ㅚ ㅝ ㅞ ㅟ ㅢ ㆎ ᆢ
+- Jongseong compounds (12): ㄲ ㄳ ㄵ ㄶ ㄺ ㄻ ㄼ ㄽ ㄾ ㄿ ㅀ ㅄ
+
+**`jong_split`** — 12-entry decomposition table for compound 종성, used by 도깨비불 (§3.5). Maps a compound jong → `(keep, promote_cho)` where `keep` stays as the closing syllable's 종성 and `promote_cho` becomes the new syllable's 초성. Derived once at engine init from `combination` rules whose result is a JONG: for each `(jong_a, jong_b) → compound`, set `jong_split[compound] = (jong_a, jong_to_cho(jong_b))`. The `jong_to_cho` map is a fixed 14-entry consonant lookup (e.g., ㅅ받침 0x11BA → ㅅ초성 0x1109; ㄱ받침 0x11A8 → ㄱ초성 0x1100). This table is **separate** from `jong_prev` (the buffer slot used for backspace restoration) — the two roles must not be conflated.
 
 ---
 
@@ -194,10 +199,10 @@ After reclassification we have `(code, cat)`. Apply standard 3-set rules:
 - Else: `cur.cho = code`.
 
 **`cat == JUNG`**:
-- If `cur.jong`: invalid state for jung — commit `cur`, start new with `jung = code`. (Hangul Syllables Block requires cho+jung; an isolated jung commits as a Hangul filler `ㅇ` + jung, or stays as bare jung — see §3.6.)
-- Else if `cur.jung`:
+- If `cur.jong` non-zero: **delegate to `apply_dokkaebibul(state, code)` (§3.5)**. The 종성 detaches from the closing syllable into the next syllable's 초성; the closing syllable commits.
+- Else if `cur.jung` non-zero:
   - Try `combo = combination[(cur.jung, code)]`. If found: `cur.jung_prev = cur.jung; cur.jung = combo`.
-  - Else: commit `cur`, start new with `jung = code`.
+  - Else: commit `cur`, start new with `jung = code` (bare-jung syllable; rendered via conjoining jamo, see §3.6).
 - Else: `cur.jung = code`.
 
 **`cat == JONG`**:
@@ -207,70 +212,76 @@ After reclassification we have `(code, cat)`. Apply standard 3-set rules:
   - Else: commit `cur`, start new (도깨비불 — see §3.5).
 - Else: `cur.jong = code`.
 
-### 3.5 도깨비불 (jongseong → next-syllable choseong)
+### 3.5 도깨비불 (`apply_dokkaebibul`)
 
-When a 종성 is followed by a 중성 (vowel), the 종성 detaches and becomes the 초성 of the next syllable. This emerges naturally from the slot rules above:
+When a vowel is typed and `cur.jong` is filled, the 종성 detaches from the closing syllable and becomes the 초성 of the next syllable. Spec (libhangul-aligned):
 
+> A compound 종성 splits: the **first jamo** stays as 종성 of the closing syllable, the **second jamo** becomes 초성 of the new syllable. A simple (non-compound) 종성 moves wholesale to the new 초성.
+
+Encapsulated as a **separate function** for testability and so the JUNG branch in §3.4 stays small:
+
+```cpp
+StepResult apply_dokkaebibul(const State& s, char32_t jung_code);
 ```
-state: { cho=ㄱ, jung=ㅏ, jong=ㅂ }   (= "갑")
-input: ㅏ (JUNG)
-  Layer 1: cur.jung filled, no jong combo possible → keep as JUNG
-  Wait — but jong is filled too. Let me re-check.
+
+Algorithm (uses `jong_split` from §2.3, NOT `cur.jong_prev`):
+```
+let closing = copy of s.cur                  // closing syllable
+let new_cho
+
+if jong_split.contains(closing.jong):
+    let split = jong_split[closing.jong]
+    closing.jong = split.keep                // first jamo stays
+    new_cho     = split.promote              // second jamo promotes (already in 초성 form)
+else:
+    new_cho     = jong_to_cho(closing.jong)  // wholesale move, convert 종성→초성 form
+    closing.jong = 0
+
+closing.jong_prev = 0                        // backup discarded — closing commits
+
+emit commit_str = render(closing)
+new_state.cur = { cho=new_cho, jung=jung_code, jong=0, all *_prev=0 }
+return { next_state=new_state, commit=commit_str, preedit=render(new_state.cur), consumed=true }
 ```
 
-Actually, the precise handling: when `cat==JUNG` and `cur.jong` is non-zero:
+Worked example — `갉 + ㅏ` (compound jong split):
+- `cur = { cho=ㄱ, jung=ㅏ, jong=ㄺ, jong_prev=ㄹ (backspace backup) }`
+- `jong_split[ㄺ] = { keep=ㄹ, promote=ㄱ초성 }`
+- closing → `{ cho=ㄱ, jung=ㅏ, jong=ㄹ }` → "갈"
+- new_state.cur → `{ cho=ㄱ초성, jung=ㅏ }` → "가"
+- emitted: commit "갈", preedit "가"
 
-- Pop `cur.jong` (and `cur.jong_prev` if present).
-- Commit the rest of `cur` (`cho + jung + 0`, e.g., "가").
-- Start new `cur` with `cho = popped jong, jung = code`. (e.g., "바")
-- If the popped `jong` was a compound (`jong_prev` non-zero): new `cur.cho = jong_prev`, the higher half of the compound stays on the previous syllable. Example: `갉 + ㅏ → 갈 + 가`, NOT `갉 + ㅏ → 가 + ㄱ가`.
+Worked example — `갑 + ㅏ` (simple jong, wholesale):
+- `cur = { cho=ㄱ, jung=ㅏ, jong=ㅂ받침 }`
+- `jong_split` does not contain ㅂ받침 → wholesale
+- closing → `{ cho=ㄱ, jung=ㅏ, jong=0 }` → "가"
+- new_state.cur → `{ cho=ㅂ초성, jung=ㅏ }` → "바"
+- emitted: commit "가", preedit "바"
 
-This is the key edge case. Spec from libhangul:
-> A compound 종성 splits: the **first jamo** stays as 종성 of the closing syllable, the **second jamo** becomes 초성 of the new syllable.
+`jong_split` covers all 12 compound 종성 (ㄲ ㄳ ㄵ ㄶ ㄺ ㄻ ㄼ ㄽ ㄾ ㄿ ㅀ ㅄ); every other 종성 takes the wholesale branch.
 
-In our buffer:
-- `cur.jong = ㄺ (compound)`, `cur.jong_prev = ㄹ`
-- 도깨비불 commits `cho + jung + jong_prev` (= "갈"), new `cur.cho = ㄱ` (the "second jamo" of ㄺ).
+### 3.6 Edge cases and invariants
 
-The decomposition table is the inverse of `combination` for jong→(jong_keep, jong_promote_to_cho):
+**Bare-jung syllable** (`{cho=0, jung=v, jong=0}`): legitimate state when a vowel is typed in initial state. Hangul Syllables Block (가–힣) cannot represent it; preedit and commit use the conjoining jamo block (U+1161 etc.). Modern Wayland clients render these correctly. ohi.pat.im behaves the same.
 
-| Compound 종성 | Stays as jong | Promotes to cho |
-|---|---|---|
-| ㄳ | ㄱ | ㅅ |
-| ㄵ | ㄴ | ㅈ |
-| ㄶ | ㄴ | ㅎ |
-| ㄺ | ㄹ | ㄱ |
-| ㄻ | ㄹ | ㅁ |
-| ㄼ | ㄹ | ㅂ |
-| ㄽ | ㄹ | ㅅ |
-| ㄾ | ㄹ | ㅌ |
-| ㄿ | ㄹ | ㅍ |
-| ㅀ | ㄹ | ㅎ |
-| ㅄ | ㅂ | ㅅ |
+**Jong-only invariant** (`{cho=0, jung=0, jong≠0}`): **unreachable in legitimate P2 input**. Every 종성 key in the bundled keymap has a galmadeuli alternate (15 jung↔jong pairs cover every modern jong consonant), so Layer 1 (§3.3) rewrites a 종성 input to its jung alternate whenever the syllable lacks a 초성/중성 to attach to. The implementation enforces this with `assert(!(cur.jong && (!cur.cho || !cur.jung)))` after every `step()`. Falsified only by a malformed custom keymap; in that defensive path, the buffer renders as raw conjoining jamo. Unit tests verify the invariant holds for every P2 input sequence.
 
-Single 종성 도깨비불 is trivial: jong moves wholesale to new cho.
+**Claimed vs passthrough — single rule**: a `(keysym, shift_state)` pair is **claimed** if and only if it has a non-zero entry in the TOML `base_keymap`. Uniformly:
+- Jamo entries: enter the composition pipeline (Layers 1 and 2).
+- Symbol/punctuation entries (e.g., `shift+L` = `·`, `shift+M` = `…`, plain `'` = `'`): commit the current syllable, then emit the symbol as an additional commit. The symbol does NOT enter the syllable buffer.
+- Unmapped keys: commit the current syllable AND return `consumed=false` so the application receives the keystroke.
 
-### 3.6 Edge cases
+The keymap TOML is the single source of truth for which keys are claimed; no behavior depends on whether the entry "looks like jamo" or "looks like punctuation".
 
-**Jung-only or jong-only syllable**: Hangul Syllables Block (가–힣) requires cho + jung. When a syllable lacks 초성, ohi.pat.im displays the bare jamo via the conjoining jamo block. We follow the same convention: emit raw conjoining jamo (`U+1161` etc.) in the preedit, NOT a precomposed Hangul Syllable. The text frontend renders these correctly on Wayland and most modern X clients.
+**Modifier combos**: `Ctrl+*` and `Alt+*` always commit the current syllable AND return `consumed=false`, regardless of whether the bare key is claimed. `Ctrl+C` must copy in any IME state.
 
-When the syllable lacks 종성, normal precomposed Syllable Block is used (e.g., "가" = U+AC00).
+**Focus loss / IME deactivate**: engine layer calls `commit_and_reset(state)` which emits `cur` rendered as Unicode and zeroes the state. Separate from `step()`.
 
-**Unmapped key while composing**: any keysym not in the TOML keymap commits the current syllable, then returns `consumed=false` so the unmapped key passes through to the application. Examples: arrow keys, function keys, ASCII punctuation that the keymap doesn't claim.
-
-**Modifier combos**: `Ctrl+*` and `Alt+*` always commit current syllable AND return `consumed=false`. The user expects `Ctrl+C` to copy regardless of IME state.
-
-**Focus loss / IME deactivate**: engine layer calls `commit_and_reset(state)` which emits `cur` rendered as Unicode and zeroes the state. Implemented separately from `step()`.
-
-**Backspace**: separate entry point `backspace(state) → StepResult`. Algorithm (mirrors ohi.pat.im `ohi_Backspace`, line 343):
-1. Find highest non-zero slot in buffer (scan ohiQ[5..0]).
-2. If that index is **odd** (1, 3, 5) and the value is a valid jamo: this means the corresponding even-slot (0, 2, 4) holds a compound and the odd slot is the pre-compound form. Restore: `even_slot = odd_slot; odd_slot = 0`. (Effectively undoes the last compound formation.)
-3. Else: zero the highest slot.
-4. If buffer is now empty AND there is no syllable to backspace: return `consumed=false` to delete a previously-committed character.
-
-**Punctuation while composing**: characters like `,` `.` `?` are NOT claimed by the keymap (they pass through unchanged). When typed mid-composition, they trigger commit-then-passthrough at the engine layer.
-
-**`shift+L` = `·` (가운뎃점) etc.**: these ARE claimed by the keymap (they're in the .ist as Korean typographic punctuation). Behavior: commit current syllable, then directly emit the punctuation char as a separate commit. Not assembled into the syllable.
+**Backspace** (`backspace(state) → StepResult`, mirrors `ohi_Backspace` at `ohi.js:343`):
+1. Scan slots `[5, 4, 3, 2, 1, 0]` for the highest non-zero index `i`.
+2. If `i` is **odd** (1, 3, 5) and `cur[i]` is a valid jamo: slot `i-1` holds a compound and slot `i` is its pre-compound backup. Restore: `cur[i-1] = cur[i]; cur[i] = 0`. (Undoes the last compound formation, e.g., ㄺ → ㄹ.)
+3. Else: zero the highest non-zero slot.
+4. If the buffer was already empty when backspace was pressed: return `consumed=false` so the application deletes a previously-committed character.
 
 ---
 
@@ -353,13 +364,14 @@ The pure automaton module is "done" when:
 
 1. `src/automaton.{h,cpp}` and `src/jamo.{h,cpp}` compile against C++20 with no fcitx5 includes.
 2. `tests/automaton_test.cpp` runs ≥100 cases covering:
-   - All 94 base keymap entries (including punctuation passthrough).
-   - All 19 galmadeuli pairs (both directions).
-   - All 28 combination rules (forward).
-   - Backspace decomposition of every compound (12 jong, 9 jung, 5 cho).
-   - 도깨비불 with single and compound jong (all 11 compound 종성).
-   - Mixed sequences (the corpus in §4, expanded to ≥30 entries).
-   - Modifier-key passthrough (Ctrl+C, Alt+Tab) returns `consumed=false`.
+   - All 94 base keymap entries (jamo path + symbol-commit path).
+   - All `galmadeuli_3shin_p2[]` entries (4 cho→jung one-way + 15 jung↔jong bidirectional, 34 directed lookups total).
+   - All 26 combination rules (5 cho + 9 jung + 12 jong).
+   - Backspace decomposition of every compound (5 cho doubles, 9 jung compounds, 12 jong compounds — undoes via backup slot).
+   - 도깨비불 with simple jong (one case per 14 modern single 종성 consonants, wholesale move) **and** compound jong (all 12 entries in `jong_split` table, split into keep + promote).
+   - Mixed sequences (corpus in §4, expanded to ≥30 entries).
+   - Modifier passthrough (Ctrl+C, Alt+Tab, plain unmapped keys) returns `consumed=false` and commits any pending syllable.
+   - **Jong-only invariant**: assert no test reaches `{cho=0, jung=0, jong≠0}` for any P2 input sequence.
 3. CI green on the feature branch.
 4. No fcitx5 wiring yet — that is M3.
 
