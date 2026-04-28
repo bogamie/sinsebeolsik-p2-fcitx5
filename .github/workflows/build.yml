@@ -1,0 +1,76 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build-24:
+    name: ubuntu-24.04 (native)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            cmake \
+            ninja-build \
+            pkg-config \
+            extra-cmake-modules \
+            gettext \
+            libfmt-dev \
+            libxkbcommon-dev \
+            libfcitx5core-dev \
+            libfcitx5config-dev \
+            libfcitx5utils-dev
+
+      - name: Configure
+        run: cmake -S . -B build -G Ninja
+
+      - name: Build
+        run: ninja -C build
+
+  # 26.04 is built in a container so we don't depend on a GitHub-hosted
+  # ubuntu-26.04 runner being available yet. Marked continue-on-error
+  # because Ubuntu 26.04 is freshly released and apt package names /
+  # dependency versions may shift; failures here are informational, not
+  # gating. M1 requires only 24.04 to be green.
+  build-26:
+    name: ubuntu-26.04 (container, best-effort)
+    runs-on: ubuntu-24.04
+    container: ubuntu:26.04
+    continue-on-error: true
+    steps:
+      - name: Install build dependencies
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            ca-certificates \
+            git \
+            build-essential \
+            cmake \
+            ninja-build \
+            pkg-config \
+            extra-cmake-modules \
+            gettext \
+            libfmt-dev \
+            libxkbcommon-dev \
+            libfcitx5core-dev \
+            libfcitx5config-dev \
+            libfcitx5utils-dev
+
+      - uses: actions/checkout@v4
+
+      - name: Configure
+        run: cmake -S . -B build -G Ninja
+
+      - name: Build
+        run: ninja -C build
