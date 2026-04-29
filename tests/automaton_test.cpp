@@ -207,80 +207,58 @@ TEST_CASE("automaton: compound jong ㄺ — 갉 = k + f + w + c",
     REQUIRE(r.preedit == syllable(0xAC09));  // 갉
 }
 
-TEST_CASE("automaton: 도깨비불 simple — 갈 + ㅏ → 가 + 라",
-          "[automaton][dokkaebibul]") {
+TEST_CASE("automaton: closed syllable + JUNG → commit + bare-jung (no 도깨비불)",
+          "[automaton][syllable-boundary]") {
     const auto& km = p2_keymap();
-    // After 'kfw' (갈), then 'F' (uppercase = forced ㅏ vowel).
+    // 신세벌식 P2 has NO 도깨비불 — confirmed against pat.im's reference
+    // simulator. The .ist's AutomataTable transitions state 3 (cho+jung+jong)
+    // → state 0 on JUNG input, which means "commit current syllable, start
+    // fresh from empty". The 종성 stays attached to the closing syllable.
     //
-    // Lowercase 'f' here would form a compound jong ㄿ instead — Layer 1
-    // doesn't rewrite ㅍ받침→ㅏ once the syllable already has cho+jung
-    // (the !cur.jung gate is closed). To trigger 도깨비불 from a closed
-    // syllable, the user must explicitly type a vowel via shift.
-    //
-    // step_jung then: cur.jong filled, cho/jung filled → apply_dokkaebibul.
-    //   jong_split has no entry for ㄹ받침 (simple jong) → wholesale move.
-    //   new_cho = jong_to_cho(ㄹ받침) = ㄹ초성. closing.jong = 0 → "가" commits.
-    //   new state {cho=ㄹ초성, jung=ㅏ} = "라".
+    // 'kfwF': 갈 (ㄱ+ㅏ+ㄹ받침) + ㅏ-vowel → "갈" commits, new state has
+    // bare jung ㅏ, which renders as conjoining jamo (since no cho).
     auto r = run_and_flush(km, "kfwF");
-    REQUIRE(r == syllable(0xAC00) + syllable(0xB77C));  // 가라
+    REQUIRE(r == syllable(0xAC08) + utf8_encode(0x1161));  // "갈" + bare ㅏ
 }
 
-TEST_CASE("automaton: 도깨비불 compound split — 갉 + ㅏ → 갈 + 가",
-          "[automaton][dokkaebibul]") {
+TEST_CASE("automaton: compound jong + JUNG → commit compound, no split",
+          "[automaton][syllable-boundary]") {
     const auto& km = p2_keymap();
-    // After 'kfwc' (갉), then 'F' (forced ㅏ vowel).
-    // jong_split[ㄺ] = {keep=ㄹ받침, promote=ㄱ초성}.
-    //   closing.jong = ㄹ받침 → "갈" commits
-    //   new state {cho=ㄱ초성, jung=ㅏ} = "가"
+    // 'kfwcF': After kfwc the syllable is 갉 (ㄱ+ㅏ+ㄺ). Earlier drafts
+    // tried to split ㄺ into ㄹ받침 + ㄱ초성 promote (libhangul-style
+    // 도깨비불), but pat.im's simulator does NOT split — 갉 commits as-is
+    // and the ㅏ becomes a fresh bare-jung syllable.
     auto r = run_and_flush(km, "kfwcF");
-    REQUIRE(r == syllable(0xAC08) + syllable(0xAC00));  // 갈가
+    REQUIRE(r == syllable(0xAC09) + utf8_encode(0x1161));  // "갉" + bare ㅏ
 }
 
-TEST_CASE("automaton: 도깨비불 split for every compound jong",
-          "[automaton][dokkaebibul]") {
+TEST_CASE("automaton: every compound 종성 commits as-is on JUNG input",
+          "[automaton][syllable-boundary][exhaustive]") {
     const auto& km = p2_keymap();
-    struct Case {
-        std::string keys;
-        char32_t closing;     // committed Hangul syllable
-        char32_t starting;    // cho of the next syllable as conjoining jamo
-    };
-    // Each row builds a syllable with cho=ㄱ jung=ㅏ jong=<compound>,
-    // then types ㅏ to trigger 도깨비불.
+    // 11 compound 종성 in P2 (ㄲ받침 omitted because the build sequence
+    // 'kfcc' creates jong-only state for the second 'c' — its compound
+    // path is exercised by the backspace tests instead). Each row: build
+    // ㄱ+ㅏ+<compound jong>, then 'F' (ㅏ vowel) → expect commit of the
+    // closed syllable + bare-jung ㅏ.
+    struct Case { std::string keys; char32_t closed; };
     Case cases[] = {
-        // Build via galmadeuli (jung→jong for second jong):
-        //   ㄳ = c(ㄱ받침) + q(ㅅ받침)
-        //   ㄵ = s(ㄴ받침) + v(ㅈ받침)
-        //   ㄶ = s(ㄴ받침) + d(ㅎ받침)
-        //   ㄺ = w(ㄹ받침) + c(ㄱ받침)
-        //   ㄻ = w(ㄹ받침) + z(ㅁ받침)
-        //   ㄼ = w(ㄹ받침) + e(ㅂ받침)
-        //   ㄽ = w(ㄹ받침) + q(ㅅ받침)
-        //   ㄾ = w(ㄹ받침) + r(ㅌ받침)
-        //   ㄿ = w(ㄹ받침) + f(ㅍ받침)
-        //   ㅀ = w(ㄹ받침) + d(ㅎ받침)
-        //   ㅄ = e(ㅂ받침) + q(ㅅ받침)
-        {"kfcq", 0xAC01, 0x1109},  // 갃 + ㅏ → 각 + 사  (ㄳ → ㄱ받침 + ㅅ초성)
-        {"kfsv", 0xAC04, 0x110C},  // 간 + ㅏ → 간 + 자  (ㄵ → ㄴ받침 + ㅈ초성)
-        {"kfsd", 0xAC04, 0x1112},  // 간 + ㅏ → 간 + 하  (ㄶ → ㄴ받침 + ㅎ초성)
-        {"kfwc", 0xAC08, 0x1100},  // 갈 + ㅏ → 갈 + 가  (ㄺ → ㄹ + ㄱ초성)
-        {"kfwz", 0xAC08, 0x1106},  // 갈 + ㅏ → 갈 + 마
-        {"kfwe", 0xAC08, 0x1107},  // 갈 + ㅏ → 갈 + 바
-        {"kfwq", 0xAC08, 0x1109},  // 갈 + ㅏ → 갈 + 사
-        {"kfwr", 0xAC08, 0x1110},  // 갈 + ㅏ → 갈 + 타
-        {"kfwf", 0xAC08, 0x1111},  // 갈 + ㅏ → 갈 + 파
-        {"kfwd", 0xAC08, 0x1112},  // 갈 + ㅏ → 갈 + 하
-        {"kfeq", 0xAC11, 0x1109},  // 갑 + ㅏ → 갑 + 사  (ㅄ → ㅂ + ㅅ초성)
+        {"kfcq", 0xAC03},  // 갃  (ㄳ idx 3)
+        {"kfsv", 0xAC05},  // 갅  (ㄵ idx 5)
+        {"kfsd", 0xAC06},  // 갆  (ㄶ idx 6)
+        {"kfwc", 0xAC09},  // 갉  (ㄺ idx 9)
+        {"kfwz", 0xAC0A},  // 갊  (ㄻ idx 10)
+        {"kfwe", 0xAC0B},  // 갋  (ㄼ idx 11)
+        {"kfwq", 0xAC0C},  // 갌  (ㄽ idx 12)
+        {"kfwr", 0xAC0D},  // 갍  (ㄾ idx 13)
+        {"kfwf", 0xAC0E},  // 갎  (ㄿ idx 14)
+        {"kfwd", 0xAC0F},  // 갏  (ㅀ idx 15)
+        {"kfeq", 0xAC12},  // 값  (ㅄ idx 18)
     };
     for (const auto& c : cases) {
-        std::string seq = c.keys + "F";  // append shift+F = forced ㅏ vowel
-        auto out = run_and_flush(km, seq);
-        // closing syllable + new syllable (cho=promote, jung=ㅏ)
-        char32_t starting_syll = 0xAC00 +
-            (c.starting - 0x1100) * 21 * 28 +
-            (0x1161 - 0x1161) * 28;
-        std::string expect = syllable(c.closing) + syllable(starting_syll);
+        std::string seq = c.keys + "F";
+        std::string expect = syllable(c.closed) + utf8_encode(0x1161);
         INFO("seq=" << seq);
-        REQUIRE(out == expect);
+        REQUIRE(run_and_flush(km, seq) == expect);
     }
 }
 
@@ -507,24 +485,29 @@ TEST_CASE("automaton: ᆢ (쌍아래아) via ZZ", "[automaton][archaic]") {
 // User-reported regression: 'jid' was producing 읗 instead of 의.
 // ---------------------------------------------------------------------------
 
-TEST_CASE("automaton: compound vowel via lowercase 종성-key (regression)",
-          "[automaton][galmadeuli][compound][regression]") {
+TEST_CASE("automaton: lowercase 종성-keys do NOT auto-form compound vowels",
+          "[automaton][galmadeuli][regression]") {
     const auto& km = p2_keymap();
+    // Confirmed against pat.im's reference simulator: ㅢ ㅟ ㅘ ㅚ ㅙ ㅝ ㅞ
+    // are formed ONLY by typing the second vowel via shift (which produces
+    // a JUNG-default keysym). Lowercase 'd' / 'f' / 'e' etc. land their
+    // 종성-default value into the jong slot — no compound rewrite even
+    // when a combination rule would exist.
+    //
+    // To produce 의/위/과/외/와/왜/워/웨 the user types the second vowel
+    // with shift held: 'jiD' = 의, 'k/F' = 과, 'jvF' = 와, etc.
     struct Case { std::string keys; char32_t expected; };
     Case cases[] = {
-        // First vowel set via cho→jung galmadeuli, second via jong-default key:
-        {"jid", 0xC758},  // ㅇ + ㅡ + (ㅎ받침→ㅣ) → ㅢ → 의
-        {"jbd", 0xC704},  // ㅇ + ㅜ + (ㅎ받침→ㅣ) → ㅟ → 위
-        {"jvd", 0xC678},  // ㅇ + ㅗ + (ㅎ받침→ㅣ) → ㅚ → 외
-        {"jvf", 0xC640},  // ㅇ + ㅗ + (ㅍ받침→ㅏ) → ㅘ → 와
-        {"jve", 0xC65C},  // ㅇ + ㅗ + (ㅂ받침→ㅐ) → ㅙ → 왜
-        {"jbr", 0xC6CC},  // ㅇ + ㅜ + (ㅌ받침→ㅓ) → ㅝ → 워
-        {"jbc", 0xC6E8},  // ㅇ + ㅜ + (ㄱ받침→ㅔ) → ㅞ → 웨
-        // First vowel set via galmadeuli (cho-key '/'), second via jong key:
-        {"k/f", 0xACFC},  // ㄱ + ㅗ + (ㅍ받침→ㅏ) → ㅘ → 과
-        {"k/d", 0xAD34},  // ㄱ + ㅗ + (ㅎ받침→ㅣ) → ㅚ → 괴
-        // Sanity: a JONG-default key whose galmadeuli alt does NOT combine
-        // stays as a 종성 (no spurious rewrite). 'jiq' = ㅇ+ㅡ+ㅅ받침=읏.
+        {"jid", 0xC757},  // ㅇ + ㅡ + ㅎ받침 → 읗  (NOT 의)
+        {"jbd", 0xC6CB},  // ㅇ + ㅜ + ㅎ받침          (NOT 위)
+        {"jvd", 0xC63F},  // ㅇ + ㅗ + ㅎ받침 → 옿  (NOT 외)
+        {"jvf", 0xC63E},  // ㅇ + ㅗ + ㅍ받침 → 옾  (NOT 와)
+        {"jve", 0xC635},  // ㅇ + ㅗ + ㅂ받침 → 옵  (NOT 왜)
+        {"jbr", 0xC6C9},  // ㅇ + ㅜ + ㅌ받침          (NOT 워)
+        {"jbc", 0xC6B1},  // ㅇ + ㅜ + ㄱ받침 → 욱  (NOT 웨)
+        {"k/f", 0xACFA},  // ㄱ + ㅗ + ㅍ받침 → 곺  (NOT 과)
+        {"k/d", 0xACFB},  // ㄱ + ㅗ + ㅎ받침 → 곻  (NOT 괴)
+        // No-combo cases — unchanged behavior either way:
         {"jiq", 0xC74F},  // ㅇ + ㅡ + ㅅ받침 → 읏
         {"jia", 0xC751},  // ㅇ + ㅡ + ㅇ받침 → 응
     };
@@ -616,39 +599,32 @@ TEST_CASE("automaton: compound jong path is unchanged by sub-case 2",
 // Parametric coverage for docs §6 acceptance criteria.
 // ---------------------------------------------------------------------------
 
-TEST_CASE("automaton: 도깨비불 simple — every modern single 종성",
-          "[automaton][dokkaebibul][exhaustive]") {
+TEST_CASE("automaton: every simple 종성 commits as-is on JUNG input",
+          "[automaton][syllable-boundary][exhaustive]") {
     const auto& km = p2_keymap();
-    // Each row: (key for jong, jong codepoint, expected promote-cho codepoint).
-    // Built syllable: 가 + jong, then 'F' (ㅏ) triggers wholesale jong→cho.
-    struct Case {
-        char     jong_key;
-        char32_t jong;
-        char32_t promote_cho;
-    };
+    // 14 modern single 종성 keys. Build ㄱ+ㅏ+<jong>, append 'F' (ㅏ),
+    // expect commit of the closed syllable + bare-jung ㅏ.
+    // No 도깨비불 — matches pat.im simulator.
+    struct Case { char jong_key; char32_t closed; };
     Case cases[] = {
-        {'c', 0x11A8, 0x1100},  // ㄱ받침 → ㄱ초성
-        {'s', 0x11AB, 0x1102},  // ㄴ받침 → ㄴ초성
-        {'g', 0x11AE, 0x1103},  // ㄷ받침 → ㄷ초성
-        {'w', 0x11AF, 0x1105},  // ㄹ받침 → ㄹ초성
-        {'z', 0x11B7, 0x1106},  // ㅁ받침 → ㅁ초성
-        {'e', 0x11B8, 0x1107},  // ㅂ받침 → ㅂ초성
-        {'q', 0x11BA, 0x1109},  // ㅅ받침 → ㅅ초성
-        {'a', 0x11BC, 0x110B},  // ㅇ받침 → ㅇ초성
-        {'v', 0x11BD, 0x110C},  // ㅈ받침 → ㅈ초성
-        {'b', 0x11BE, 0x110E},  // ㅊ받침 → ㅊ초성
-        {'t', 0x11BF, 0x110F},  // ㅋ받침 → ㅋ초성
-        {'r', 0x11C0, 0x1110},  // ㅌ받침 → ㅌ초성
-        {'f', 0x11C1, 0x1111},  // ㅍ받침 → ㅍ초성
-        {'d', 0x11C2, 0x1112},  // ㅎ받침 → ㅎ초성
+        {'c', 0xAC01},  // ㄱ받침 → 각
+        {'s', 0xAC04},  // ㄴ받침 → 간
+        {'g', 0xAC07},  // ㄷ받침 → 갇
+        {'w', 0xAC08},  // ㄹ받침 → 갈
+        {'z', 0xAC10},  // ㅁ받침 → 감
+        {'e', 0xAC11},  // ㅂ받침 → 갑
+        {'q', 0xAC13},  // ㅅ받침 → 갓
+        {'a', 0xAC15},  // ㅇ받침 → 강
+        {'v', 0xAC16},  // ㅈ받침 → 갖
+        {'b', 0xAC17},  // ㅊ받침 → 갗
+        {'t', 0xAC18},  // ㅋ받침 → 갘
+        {'r', 0xAC19},  // ㅌ받침 → 같
+        {'f', 0xAC1A},  // ㅍ받침 → 갚
+        {'d', 0xAC1B},  // ㅎ받침 → 갛
     };
     for (const auto& c : cases) {
         std::string seq = std::string("kf") + c.jong_key + "F";
-        // Closing syllable always commits as 가 (cho+jung, jong stripped).
-        // New syllable: promote_cho + ㅏ.
-        char32_t promote_idx = c.promote_cho - 0x1100;
-        char32_t starting    = 0xAC00 + promote_idx * 21 * 28;
-        std::string expected = syllable(0xAC00) + syllable(starting);
+        std::string expected = syllable(c.closed) + utf8_encode(0x1161);
         INFO("seq=" << seq);
         REQUIRE(run_and_flush(km, seq) == expected);
     }
@@ -904,12 +880,12 @@ TEST_CASE("automaton: mixed-sequence corpus", "[automaton][corpus]") {
         // compound vowels (need shift+F for explicit ㅏ after ㅗ)
         {"k/F",  syllable(0xACFC)},                            // 과
         {"jiD",  syllable(0xC758)},                            // 의
-        // 도깨비불 simple jong
-        {"kfwF", syllable(0xAC00) + syllable(0xB77C)},         // 가라
-        {"kfsF", syllable(0xAC00) + syllable(0xB098)},         // 가나
-        // 도깨비불 compound jong
-        {"kfwcF", syllable(0xAC08) + syllable(0xAC00)},        // 갈가 (ㄺ→ㄹ+ㄱ초성)
-        {"kfeqF", syllable(0xAC11) + syllable(0xC0AC)},        // 갑사 (ㅄ→ㅂ+ㅅ초성)
+        // closed syllable + JUNG → commit + bare-jung (NO 도깨비불)
+        {"kfwF", syllable(0xAC08) + utf8_encode(0x1161)},      // 갈ㅏ
+        {"kfsF", syllable(0xAC04) + utf8_encode(0x1161)},      // 간ㅏ
+        // compound jong commits as-is (no split)
+        {"kfwcF", syllable(0xAC09) + utf8_encode(0x1161)},     // 갉ㅏ
+        {"kfeqF", syllable(0xAC12) + utf8_encode(0x1161)},     // 값ㅏ
         // multi-syllable phrases (commit at each new cho)
         {"jfshTa", syllable(0xC548) + syllable(0xB155)},       // 안녕
         {"mfsjokno", std::string()},  // computed below — too complex inline

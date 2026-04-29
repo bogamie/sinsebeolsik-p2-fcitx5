@@ -49,37 +49,6 @@ StepResult update(const State& s, Syllable next_cur) {
     return r;
 }
 
-// Apply 도깨비불 split per docs §3.5. Caller has verified that the
-// closing syllable has cho+jung filled and jong non-zero.
-StepResult apply_dokkaebibul(const State& s,
-                             const Keymap& km,
-                             char32_t jung_code) {
-    Syllable closing = s.cur;
-    char32_t new_cho = 0;
-
-    auto split_it = km.jong_split.find(closing.jong);
-    if (split_it != km.jong_split.end()) {
-        // Compound jong — split into keep + promote.
-        closing.jong = split_it->second.keep;
-        new_cho      = split_it->second.promote;
-    } else {
-        // Simple jong — wholesale move to next 초성.
-        new_cho      = jong_to_cho(closing.jong);
-        closing.jong = 0;
-    }
-    closing.jong_prev = 0;  // backup discarded — closing commits
-
-    StepResult r;
-    r.commit = render(closing);
-    Syllable n;
-    n.cho  = new_cho;
-    n.jung = jung_code;
-    r.next.cur = n;
-    r.preedit  = render(n);
-    r.consumed = true;
-    return r;
-}
-
 // ---------------------------------------------------------------------------
 // Layer 1 — galmadeuli reclassification (docs §3.3).
 // Returns the (possibly rewritten) (code, cat) pair handed to Layer 2.
@@ -124,24 +93,12 @@ Reclassified layer1_reclassify(const State& s,
                 }
             }
         }
-        // Sub-case 2 — cur has 초성+중성 but no 종성: if the JONG's
-        // galmadeuli alt is a JUNG that compounds with the current 중성,
-        // rewrite to JUNG. This is how 의 (jid), 위 (jbd), 과 (k/f), 외
-        // (jvd), 와 (jvf), etc. form when the user types the second
-        // vowel via its 종성-default key.
-        //
-        // Maps to the .ist 'd' key spec — pat.im uses a virtual-jung flag
-        // (`E in 0x1F5..0x1F8`) for the same effect; we approximate it by
-        // checking whether the compound exists, which captures every
-        // legitimate ㅢ ㅟ ㅘ ㅚ ㅙ ㅝ ㅞ ㅢ ㆎ-forming combination.
-        if (s.cur.cho != 0 && s.cur.jung != 0 && s.cur.jong == 0) {
-            char32_t alt = galmadeuli_lookup(km, code);
-            if (alt != 0 && classify(alt) == JamoSlot::Jung) {
-                if (combination_lookup(km, s.cur.jung, alt) != 0) {
-                    return {alt, JamoSlot::Jung};
-                }
-            }
-        }
+        // (No sub-case 2 — the .ist's E-in-virtual-range condition for
+        // forming compound vowels via lowercase 종성-keys is intentionally
+        // NOT replicated. Tested against pat.im's reference simulator:
+        //   - 'jid' → 읗 (NOT 의); 의 requires shift+D for explicit ㅣ.
+        //   - 'k/f' → 곺 (NOT 과); 과 requires shift+F for explicit ㅏ.
+        // Matches ohi.pat.im exactly — it has no equivalent rewrite.)
         return {code, cat};
     }
 
@@ -188,16 +145,16 @@ StepResult step_cho(const State& s, const Keymap& km, char32_t code) {
 }
 
 StepResult step_jung(const State& s, const Keymap& km, char32_t code) {
-    // 도깨비불 path — current syllable has cho+jung+jong, vowel arrives.
-    if (s.cur.jong != 0 && s.cur.cho != 0 && s.cur.jung != 0) {
-        return apply_dokkaebibul(s, km, code);
-    }
-    // Edge: jong-only or cho+jong without jung. No real syllable to
-    // detach from — commit cur as-is, start new with the vowel.
+    // Closed syllable (jong filled) → commit, start new with bare-jung.
+    // Note: 신세벌식 P2 has NO 도깨비불 — the .ist's AutomataTable says
+    // state 3 + B (jung) → state 0 (commit current, fresh start). ohi
+    // and the reference simulator at pat.im behave the same: 갈 + ㅏ →
+    // commits 갈 then bare ㅏ jung; the 종성 does not detach into
+    // the next syllable's 초성. Confirmed via user testing.
     if (s.cur.jong != 0) {
         return commit_and_start_with(s, code, JamoSlot::Jung);
     }
-    // Compound jung already formed — no chained compounds, commit & restart.
+    // Compound jung already formed — no chained compounds.
     if (s.cur.jung_prev != 0) {
         return commit_and_start_with(s, code, JamoSlot::Jung);
     }
