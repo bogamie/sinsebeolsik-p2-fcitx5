@@ -106,10 +106,16 @@ Reclassified layer1_reclassify(const State& s,
     }
 
     if (cat == JamoSlot::Jong) {
-        // Sub-case 1 — cur lacks 초성 or 중성: route the keystroke to
-        // the corresponding JUNG (or rarely CHO) via galmadeuli so we
-        // never produce a degenerate compound.
-        if (s.cur.cho == 0 || s.cur.jung == 0) {
+        // Sub-case 1 — post-cho with no jung yet. Maps to the .ist's
+        // `D && !E` condition: a 종성-default key after a 초성 is
+        // intended to advance to the vowel via galmadeuli (e.g., 'kf'
+        // → ㄱ + ㅏ = 가).
+        //
+        // Empty state and bare-jung states intentionally do NOT trigger
+        // this rewrite. ohi.pat.im / 박경남 .ist agree that an isolated
+        // 종성 key produces a 종성 (rendered as conjoining jamo) rather
+        // than a vowel. Empty + 'a' = bare ㅇ받침 in preedit, not ㅠ.
+        if (s.cur.cho != 0 && s.cur.jung == 0) {
             char32_t alt = galmadeuli_lookup(km, code);
             if (alt != 0) {
                 JamoSlot alt_cat = classify(alt);

@@ -534,6 +534,71 @@ TEST_CASE("automaton: compound vowel via lowercase 종성-key (regression)",
     }
 }
 
+TEST_CASE("automaton: empty-state JONG-default keys stay as 종성 (regression)",
+          "[automaton][galmadeuli][regression]") {
+    const auto& km = p2_keymap();
+    // User-reported behavior: in P2 reference simulators (ohi.pat.im,
+    // pat.im 날개셋), pressing a 종성-default key in empty state shows
+    // the 받침 (rendered via conjoining jamo). Previously our Layer 1
+    // sub-case 1 was over-aggressive and rewrote these to vowels.
+    //
+    // Each row: (key, expected jong codepoint). The preedit should be
+    // the conjoining jamo for that 받침.
+    struct Case { char key; char32_t jong; };
+    Case cases[] = {
+        {'a', 0x11BC},  // ㅇ받침 (NOT ㅠ)
+        {'c', 0x11A8},  // ㄱ받침 (NOT ㅔ)
+        {'d', 0x11C2},  // ㅎ받침 (NOT ㅣ)
+        {'q', 0x11BA},  // ㅅ받침 (NOT ㅒ)
+        {'f', 0x11C1},  // ㅍ받침 (NOT ㅏ)
+        {'w', 0x11AF},  // ㄹ받침 (NOT ㅑ)
+        {'z', 0x11B7},  // ㅁ받침 (NOT ㆍ)
+    };
+    for (const auto& c : cases) {
+        State s;
+        KeyInput k; k.keysym = static_cast<char32_t>(c.key);
+        auto r = step(s, km, k);
+        INFO("key='" << c.key << "'");
+        REQUIRE(r.consumed);
+        REQUIRE(r.next.cur.cho  == 0);
+        REQUIRE(r.next.cur.jung == 0);
+        REQUIRE(r.next.cur.jong == c.jong);
+        REQUIRE(r.commit.empty());
+        REQUIRE(r.preedit == utf8_encode(c.jong));
+    }
+}
+
+TEST_CASE("automaton: post-cho JONG-default keys still galmadeuli to JUNG",
+          "[automaton][galmadeuli][regression]") {
+    const auto& km = p2_keymap();
+    // Sub-case 1 still fires post-cho — 'kf' must remain 가.
+    struct Case { std::string keys; char32_t expected; };
+    Case cases[] = {
+        {"kf", 0xAC00},  // ㄱ + (ㅍ받침→ㅏ) = 가
+        {"jf", 0xC544},  // ㅇ + ㅏ = 아
+        {"jq", 0xC598},  // ㅇ + (ㅅ받침→ㅒ) = 얘
+        {"jc", 0xC5D0},  // ㅇ + (ㄱ받침→ㅔ) = 에
+        {"jd", 0xC774},  // ㅇ + (ㅎ받침→ㅣ) = 이
+        {"jz", 0xC544 + 17 - 0xC544},  // (placeholder) — recompute below
+    };
+    cases[5].expected = 0xAC00 + 11 * 28 * 21 + (0x119E - 0x119E);
+    // ㅇ + ㆍ — there's no precomposed Hangul Syllable (archaic vowel),
+    // so this row would render as conjoining jamo. Skip the precomposed
+    // assertion and check directly:
+    {
+        State s; KeyInput k; k.keysym = 'j'; s = step(s, km, k).next;
+        k.keysym = 'z';                       auto r = step(s, km, k);
+        REQUIRE(r.next.cur.cho  == 0x110B);
+        REQUIRE(r.next.cur.jung == 0x119E);   // ㆍ via galmadeuli
+        REQUIRE(r.next.cur.jong == 0);
+    }
+    for (size_t i = 0; i < 5; ++i) {
+        const auto& c = cases[i];
+        INFO("seq=" << c.keys);
+        REQUIRE(run(km, c.keys).preedit == syllable(c.expected));
+    }
+}
+
 TEST_CASE("automaton: compound jong path is unchanged by sub-case 2",
           "[automaton][galmadeuli][regression]") {
     const auto& km = p2_keymap();
@@ -704,30 +769,21 @@ TEST_CASE("automaton: every base_keymap entry produces its declared output",
             continue;
         }
 
-        // Jamo entry. Layer 1 may have rewritten via galmadeuli. From an
-        // empty state:
+        // Jamo entry. From an empty state:
         //   - CHO: lands in cur.cho.
         //   - JUNG: lands in cur.jung.
-        //   - JONG: galmadeuli rewrites to JUNG (or rarely CHO) since
-        //     no syllable to attach to. Lands accordingly.
+        //   - JONG: lands in cur.jong (jong-only state). Layer 1's
+        //     galmadeuli sub-case 1 only fires post-cho, not in empty
+        //     state — matches ohi.pat.im / .ist behavior where an
+        //     isolated 종성 key shows as a conjoining 받침 jamo.
         if (cat == JamoSlot::Cho) {
             REQUIRE(r.next.cur.cho == code);
         } else if (cat == JamoSlot::Jung) {
             REQUIRE(r.next.cur.jung == code);
         } else if (cat == JamoSlot::Jong) {
-            // Expect galmadeuli rewrite to JUNG (P2 has 15 jong↔jung pairs
-            // covering every modern jong consonant + ㆍ).
-            char32_t alt = galmadeuli_lookup(km, code);
-            REQUIRE(alt != 0);
-            JamoSlot alt_cat = classify(alt);
-            if (alt_cat == JamoSlot::Jung) {
-                REQUIRE(r.next.cur.jung == alt);
-            } else if (alt_cat == JamoSlot::Cho) {
-                REQUIRE(r.next.cur.cho == alt);
-            } else {
-                FAIL("jong-default key with no jung/cho alternate: 0x"
-                     << std::hex << (uint32_t)code);
-            }
+            REQUIRE(r.next.cur.jong == code);
+            REQUIRE(r.next.cur.cho == 0);
+            REQUIRE(r.next.cur.jung == 0);
         }
     }
 }
