@@ -106,15 +106,33 @@ Reclassified layer1_reclassify(const State& s,
     }
 
     if (cat == JamoSlot::Jong) {
-        // Cannot attach a 종성 to a syllable that lacks 초성 or 중성:
-        // route the keystroke to the corresponding JUNG (or rarely CHO)
-        // via galmadeuli so we never produce a degenerate compound.
+        // Sub-case 1 — cur lacks 초성 or 중성: route the keystroke to
+        // the corresponding JUNG (or rarely CHO) via galmadeuli so we
+        // never produce a degenerate compound.
         if (s.cur.cho == 0 || s.cur.jung == 0) {
             char32_t alt = galmadeuli_lookup(km, code);
             if (alt != 0) {
                 JamoSlot alt_cat = classify(alt);
                 if (alt_cat == JamoSlot::Jung || alt_cat == JamoSlot::Cho) {
                     return {alt, alt_cat};
+                }
+            }
+        }
+        // Sub-case 2 — cur has 초성+중성 but no 종성: if the JONG's
+        // galmadeuli alt is a JUNG that compounds with the current 중성,
+        // rewrite to JUNG. This is how 의 (jid), 위 (jbd), 과 (k/f), 외
+        // (jvd), 와 (jvf), etc. form when the user types the second
+        // vowel via its 종성-default key.
+        //
+        // Maps to the .ist 'd' key spec — pat.im uses a virtual-jung flag
+        // (`E in 0x1F5..0x1F8`) for the same effect; we approximate it by
+        // checking whether the compound exists, which captures every
+        // legitimate ㅢ ㅟ ㅘ ㅚ ㅙ ㅝ ㅞ ㅢ ㆎ-forming combination.
+        if (s.cur.cho != 0 && s.cur.jung != 0 && s.cur.jong == 0) {
+            char32_t alt = galmadeuli_lookup(km, code);
+            if (alt != 0 && classify(alt) == JamoSlot::Jung) {
+                if (combination_lookup(km, s.cur.jung, alt) != 0) {
+                    return {alt, JamoSlot::Jung};
                 }
             }
         }

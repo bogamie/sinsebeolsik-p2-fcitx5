@@ -501,6 +501,53 @@ TEST_CASE("automaton: ᆢ (쌍아래아) via ZZ", "[automaton][archaic]") {
 }
 
 // ---------------------------------------------------------------------------
+// Layer 1 sub-case 2 — JONG-default key forms compound vowel with cur.jung
+// when the galmadeuli alt is a JUNG that combines. The .ist tracks this via
+// virtual-unit codepoints; we approximate by checking the combination table.
+// User-reported regression: 'jid' was producing 읗 instead of 의.
+// ---------------------------------------------------------------------------
+
+TEST_CASE("automaton: compound vowel via lowercase 종성-key (regression)",
+          "[automaton][galmadeuli][compound][regression]") {
+    const auto& km = p2_keymap();
+    struct Case { std::string keys; char32_t expected; };
+    Case cases[] = {
+        // First vowel set via cho→jung galmadeuli, second via jong-default key:
+        {"jid", 0xC758},  // ㅇ + ㅡ + (ㅎ받침→ㅣ) → ㅢ → 의
+        {"jbd", 0xC704},  // ㅇ + ㅜ + (ㅎ받침→ㅣ) → ㅟ → 위
+        {"jvd", 0xC678},  // ㅇ + ㅗ + (ㅎ받침→ㅣ) → ㅚ → 외
+        {"jvf", 0xC640},  // ㅇ + ㅗ + (ㅍ받침→ㅏ) → ㅘ → 와
+        {"jve", 0xC65C},  // ㅇ + ㅗ + (ㅂ받침→ㅐ) → ㅙ → 왜
+        {"jbr", 0xC6CC},  // ㅇ + ㅜ + (ㅌ받침→ㅓ) → ㅝ → 워
+        {"jbc", 0xC6E8},  // ㅇ + ㅜ + (ㄱ받침→ㅔ) → ㅞ → 웨
+        // First vowel set via galmadeuli (cho-key '/'), second via jong key:
+        {"k/f", 0xACFC},  // ㄱ + ㅗ + (ㅍ받침→ㅏ) → ㅘ → 과
+        {"k/d", 0xAD34},  // ㄱ + ㅗ + (ㅎ받침→ㅣ) → ㅚ → 괴
+        // Sanity: a JONG-default key whose galmadeuli alt does NOT combine
+        // stays as a 종성 (no spurious rewrite). 'jiq' = ㅇ+ㅡ+ㅅ받침=읏.
+        {"jiq", 0xC74F},  // ㅇ + ㅡ + ㅅ받침 → 읏
+        {"jia", 0xC751},  // ㅇ + ㅡ + ㅇ받침 → 응
+    };
+    for (const auto& c : cases) {
+        INFO("seq=" << c.keys);
+        REQUIRE(run(km, c.keys).preedit == syllable(c.expected));
+    }
+}
+
+TEST_CASE("automaton: compound jong path is unchanged by sub-case 2",
+          "[automaton][galmadeuli][regression]") {
+    const auto& km = p2_keymap();
+    // Sub-case 2 only fires when cur.jong == 0. Once a single 종성 is in
+    // place, subsequent JONG keys go through the standard combination path
+    // (Case C in §3.4), forming compound 받침 — not switching to JUNG.
+    auto r = run(km, "kfwf");  // 갈 + ㅍ받침 → 갎 (ㄿ compound)
+    REQUIRE(r.preedit == syllable(0xAC0E));  // 갎
+
+    auto r2 = run(km, "kfeq");  // 갑 + ㅅ받침 → 값 (ㅄ)
+    REQUIRE(r2.preedit == syllable(0xAC12));  // 값
+}
+
+// ---------------------------------------------------------------------------
 // Parametric coverage for docs §6 acceptance criteria.
 // ---------------------------------------------------------------------------
 
