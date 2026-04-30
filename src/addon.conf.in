@@ -7,5 +7,5 @@ Category=InputMethod
 Version=@PROJECT_VERSION@
 Type=SharedLibrary
 Library=libsinsebeolsik-p2
-OnRequest=False
+OnRequest=True
 Configurable=False
