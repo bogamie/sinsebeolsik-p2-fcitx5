@@ -38,6 +38,9 @@ jobs:
       - name: Build
         run: ninja -C build
 
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
   # 26.04 is built in a container so we don't depend on a GitHub-hosted
   # ubuntu-26.04 runner being available yet. Marked continue-on-error
   # because Ubuntu 26.04 is freshly released and apt package names /
@@ -74,3 +77,6 @@ jobs:
 
       - name: Build
         run: ninja -C build
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure

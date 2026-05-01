@@ -1,0 +1,293 @@
+# 신세벌식 P2 키맵
+#
+# QWERTY printable 한 글자(대소문자 구분) → 자동기 입력 단위(Cho/Jung/VJung/Jong)
+# 변환 규칙. 자모 단위로 매핑이 결정되면 자동기가 받아서 합성한다.
+#
+# 출처: pat.im 신세벌식 P2 (.ist) 정의 — https://ohi.pat.im/?ko=sin3-p2
+#
+# ─── 평가 모델 ────────────────────────────────────────────────────────────────
+# 각 [[key]]는 우선순위 순서대로 rules 배열을 가진다.
+# rules의 첫 번째 매칭에서 멈추고 그 output을 적용한다.
+# 모든 rule이 실패하면 통과(passthrough) — 호스트가 받음.
+#
+# rule 필드:
+#   when     문자열 — predicate 식. 비어있으면 무조건 매치.
+#   output   table — 정확히 한 슬롯만 채움.
+#
+# output 슬롯:
+#   cho   = "..."   초성 (Cho enum 이름: G GG N D DD R M B BB S SS O J JJ C K T P H)
+#   jung  = "..."   중성 (Jung enum: A AE YA YAE EO E YEO YE O WA WAE OI YO U UEO WE WI YU EU EUI I)
+#   vjung = "..."   가상 중성 (VJung enum: O U EU F)
+#   jong  = "..."   종성 (Jong enum: G GG GS N NJ NH D R RG RM RB RS RT RP RH M B BS S SS O J C K T P H)
+#   passthrough = true   P2 매핑 아님 (호스트로 통과)
+#
+# ─── predicate 식 문법 ──────────────────────────────────────────────────────
+# atom :=  D | E | F | E_v_O | E_v_U | E_v_EU | E_v_F | E_any_v
+# unary := "!" unary | atom | "(" expr ")"
+# and  := unary ("&&" unary)*
+# or   := and   ("||" and)*
+# expr := or
+#
+# 술어 정의(자동기 state로부터):
+#   D        cho 슬롯 채워짐
+#   E        jung 슬롯 채워짐 (real or virtual)
+#   F        jong 슬롯 채워짐
+#   E_v_O    jung == VJung::O   (가상 ㅗ, .ist 501)
+#   E_v_U    jung == VJung::U   (가상 ㅜ, .ist 502)
+#   E_v_EU   jung == VJung::EU  (가상 ㅡ, .ist 503)
+#   E_v_F    jung == VJung::F   (가상 ㆍ, .ist 504)
+#   E_any_v  jung이 가상 중성
+
+[meta]
+name = "Sinsebeolsik P2"
+korean_name = "신세벌식 P2"
+version = "1"
+source = "pat.im sin3-p2"
+
+# ─── 오른손 lowercase = 항상 초성 ─────────────────────────────────────────────
+
+[[key]]
+key = "h"
+rules = [{ output = { cho = "N" } }]    # ㄴ
+
+[[key]]
+key = "j"
+rules = [{ output = { cho = "O" } }]    # ㅇ
+
+[[key]]
+key = "k"
+rules = [{ output = { cho = "G" } }]    # ㄱ
+
+[[key]]
+key = "l"
+rules = [{ output = { cho = "J" } }]    # ㅈ
+
+[[key]]
+key = "m"
+rules = [{ output = { cho = "H" } }]    # ㅎ
+
+[[key]]
+key = "n"
+rules = [{ output = { cho = "S" } }]    # ㅅ
+
+[[key]]
+key = "u"
+rules = [{ output = { cho = "D" } }]    # ㄷ
+
+[[key]]
+key = "y"
+rules = [{ output = { cho = "R" } }]    # ㄹ
+
+[[key]]
+key = ";"
+rules = [{ output = { cho = "B" } }]    # ㅂ
+
+[[key]]
+key = "'"
+rules = [{ output = { cho = "T" } }]    # ㅌ
+
+# ─── 오른손 lowercase + 가상 중성 단축 ──────────────────────────────────────
+# cho-only 상태에서만 가상 중성으로 변환, 그 외에는 초성으로 동작.
+
+[[key]]
+key = "/"
+rules = [
+    { when = "D && !E && !F", output = { vjung = "O" } },   # 가상 ㅗ
+    { output = { cho = "K" } },                              # ㅋ
+]
+
+[[key]]
+key = "i"
+rules = [
+    { when = "D && !E && !F", output = { vjung = "EU" } },  # 가상 ㅡ
+    { output = { cho = "M" } },                              # ㅁ
+]
+
+[[key]]
+key = "o"
+rules = [
+    { when = "D && !E && !F", output = { vjung = "U" } },   # 가상 ㅜ
+    { output = { cho = "C" } },                              # ㅊ
+]
+
+[[key]]
+key = "p"
+rules = [
+    { when = "D && !E && !F", output = { vjung = "F" } },   # 가상 ㆍ (옛한글)
+    { output = { cho = "P" } },                              # ㅍ
+]
+
+# ─── 왼손 lowercase = 갈마들이 ──────────────────────────────────────────────
+# (D && !E) 또는 가상 중성 일부 조건에서 jung, 그 외에는 jong.
+
+[[key]]
+key = "q"
+rules = [
+    { when = "D && !E", output = { jung = "YAE" } },         # ㅒ
+    { output = { jong = "S" } },                             # ㅅ jong
+]
+
+[[key]]
+key = "w"
+rules = [
+    { when = "D && !E", output = { jung = "YA" } },          # ㅑ
+    { output = { jong = "R" } },                             # ㄹ jong
+]
+
+[[key]]
+key = "e"
+rules = [
+    { when = "(D && !E) || E_v_O", output = { jung = "AE" } },   # ㅐ
+    { output = { jong = "B" } },                                  # ㅂ jong
+]
+
+[[key]]
+key = "r"
+rules = [
+    { when = "(D && !E) || E_v_U", output = { jung = "EO" } },   # ㅓ
+    { output = { jong = "T" } },                                  # ㅌ jong
+]
+
+[[key]]
+key = "t"
+rules = [
+    { when = "D && !E", output = { jung = "YEO" } },         # ㅕ
+    { output = { jong = "K" } },                             # ㅋ jong
+]
+
+[[key]]
+key = "a"
+rules = [
+    { when = "D && !E", output = { jung = "YU" } },          # ㅠ
+    { output = { jong = "O" } },                             # ㅇ jong
+]
+
+[[key]]
+key = "s"
+rules = [
+    { when = "D && !E", output = { jung = "YE" } },          # ㅖ
+    { output = { jong = "N" } },                             # ㄴ jong
+]
+
+[[key]]
+key = "d"
+rules = [
+    { when = "(D && !E) || E_any_v", output = { jung = "I" } },  # ㅣ
+    { output = { jong = "H" } },                                  # ㅎ jong
+]
+
+[[key]]
+key = "f"
+rules = [
+    { when = "(D && !E) || E_v_O", output = { jung = "A" } },    # ㅏ
+    { output = { jong = "P" } },                                  # ㅍ jong
+]
+
+[[key]]
+key = "g"
+rules = [
+    { when = "D && !E", output = { jung = "EU" } },          # ㅡ
+    { output = { jong = "D" } },                             # ㄷ jong
+]
+
+[[key]]
+key = "z"
+# 옛한글 ㆍ는 v1 미지원 — 갈마 분기는 passthrough로 떨어트린다.
+rules = [
+    { when = "(D && !E) || E_v_F", output = { passthrough = true } },
+    { output = { jong = "M" } },                             # ㅁ jong
+]
+
+[[key]]
+key = "x"
+rules = [
+    { when = "D && !E", output = { jung = "YO" } },          # ㅛ
+    { output = { jong = "SS" } },                            # ㅆ jong
+]
+
+[[key]]
+key = "c"
+rules = [
+    { when = "(D && !E) || E_v_U", output = { jung = "E" } },    # ㅔ
+    { output = { jong = "G" } },                                  # ㄱ jong
+]
+
+[[key]]
+key = "v"
+rules = [
+    { when = "D && !E", output = { jung = "O" } },           # ㅗ
+    { output = { jong = "J" } },                             # ㅈ jong
+]
+
+[[key]]
+key = "b"
+rules = [
+    { when = "D && !E", output = { jung = "U" } },           # ㅜ
+    { output = { jong = "C" } },                             # ㅊ jong
+]
+
+# ─── 왼손 uppercase = 무조건 jung ────────────────────────────────────────────
+
+[[key]]
+key = "A"
+rules = [{ output = { jung = "YU" } }]
+
+[[key]]
+key = "B"
+rules = [{ output = { jung = "U" } }]
+
+[[key]]
+key = "C"
+rules = [{ output = { jung = "E" } }]
+
+[[key]]
+key = "D"
+rules = [{ output = { jung = "I" } }]
+
+[[key]]
+key = "E"
+rules = [{ output = { jung = "AE" } }]
+
+[[key]]
+key = "F"
+rules = [{ output = { jung = "A" } }]
+
+[[key]]
+key = "G"
+rules = [{ output = { jung = "EU" } }]
+
+[[key]]
+key = "Q"
+rules = [{ output = { jung = "YAE" } }]
+
+[[key]]
+key = "R"
+rules = [{ output = { jung = "EO" } }]
+
+[[key]]
+key = "S"
+rules = [{ output = { jung = "YE" } }]
+
+[[key]]
+key = "T"
+rules = [{ output = { jung = "YEO" } }]
+
+[[key]]
+key = "V"
+rules = [{ output = { jung = "O" } }]
+
+[[key]]
+key = "W"
+rules = [{ output = { jung = "YA" } }]
+
+[[key]]
+key = "X"
+rules = [{ output = { jung = "YO" } }]
+
+# Z (shift) → 옛한글 ㆍ — 미지원, passthrough.
+[[key]]
+key = "Z"
+rules = [{ output = { passthrough = true } }]
+
+# 오른손 uppercase (H/J/K/L/M/N/U/Y/P/I/O)는 항목 자체가 없음 → 자동으로 passthrough.
+# (시뮬레이터에선 □ ' " · … ― ○ × ; 등 기호 치환이지만 v1은 호스트로 통과시킨다.)
