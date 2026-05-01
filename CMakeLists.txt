@@ -19,6 +19,8 @@ include(ECMUninstallTarget)
 find_package(Fcitx5Core 5.0.0 REQUIRED)
 find_package(fmt REQUIRED)
 find_package(Gettext REQUIRED)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(XKBCOMMON REQUIRED IMPORTED_TARGET xkbcommon>=0.5.0)
 
 set(GETTEXT_DOMAIN "fcitx5-sinsebeolsik-p2")
 add_definitions(-DFCITX_GETTEXT_DOMAIN=\"${GETTEXT_DOMAIN}\")
