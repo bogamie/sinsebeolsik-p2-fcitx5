@@ -61,6 +61,18 @@ void freeze_virtual_jung(State& s) {
 
 StepResult apply_cho(const State& s, Cho c) {
     StepResult r;
+
+    // 초성-only 상태에서 같은 초성 다시 → 쌍자음 (UnitMix CHO)
+    //   ㄱㄱ→ㄲ, ㄷㄷ→ㄸ, ㅂㅂ→ㅃ, ㅅㅅ→ㅆ, ㅈㅈ→ㅉ
+    if (s.cho && !s.has_jung() && !s.jong) {
+        if (auto doubled = combine_cho(*s.cho, c)) {
+            r.state = s;
+            r.state.cho = *doubled;
+            r.preedit = render(r.state);
+            return r;
+        }
+    }
+
     if (!s.empty()) {
         r.commit = render(s);
     }

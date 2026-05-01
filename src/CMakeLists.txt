@@ -7,6 +7,8 @@ add_library(sin3p2_core STATIC
 )
 target_include_directories(sin3p2_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_compile_features(sin3p2_core PUBLIC cxx_std_20)
+# 정적 lib을 SHARED MODULE에 링크하려면 -fPIC 필요
+set_property(TARGET sin3p2_core PROPERTY POSITION_INDEPENDENT_CODE ON)
 
 add_library(sinsebeolsik-p2 MODULE
     engine.cpp

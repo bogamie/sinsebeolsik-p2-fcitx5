@@ -114,6 +114,20 @@ TEST_CASE("keymap: 짧은 단어들", "[keymap][corpus]") {
 
 // ─── passthrough (Hangul-mapped이 아닌 키) ───────────────────────────────────
 
+TEST_CASE("keymap: 쌍자음 — 같은 초성 두 번", "[keymap][double-cho]") {
+    REQUIRE(visible(run_qwerty(U"kk")) == U"ㄲ");
+    REQUIRE(visible(run_qwerty(U"uu")) == U"ㄸ");
+    REQUIRE(visible(run_qwerty(U";;")) == U"ㅃ");
+    REQUIRE(visible(run_qwerty(U"nn")) == U"ㅆ");
+    REQUIRE(visible(run_qwerty(U"ll")) == U"ㅉ");
+    // 음절 합성
+    REQUIRE(visible(run_qwerty(U"kkf"))  == U"까");
+    REQUIRE(visible(run_qwerty(U";;f"))  == U"빠");
+    REQUIRE(visible(run_qwerty(U"nnfs")) == U"싼");  // ㅆ + ㅏ + ㄴ jong
+    // 다른 초성 두 번 → commit + 새 음절
+    REQUIRE(visible(run_qwerty(U"kh"))  == U"ㄱㄴ");
+}
+
 TEST_CASE("keymap: 숫자/공백/문장부호 passthrough", "[keymap][passthrough]") {
     // 숫자
     REQUIRE(visible(run_qwerty(U"123")) == U"123");
