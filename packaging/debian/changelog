@@ -1,3 +1,11 @@
+fcitx5-sinsebeolsik-p2 (0.1.1) unstable; urgency=medium
+
+  * Bundle setup-fcitx5-trigger.sh as /usr/bin/sinsebeolsik-p2-setup-trigger
+    so .deb users can register the Hangul keysym in fcitx5 without cloning
+    the repo or curling a script from GitHub.
+
+ -- Bogamie <bogamie02@gmail.com>  Fri, 01 May 2026 20:30:00 +0900
+
 fcitx5-sinsebeolsik-p2 (0.1.0) unstable; urgency=medium
 
   * Initial release.

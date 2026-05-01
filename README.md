@@ -42,12 +42,19 @@ Installs into `~/.local/lib/fcitx5/`, `~/.local/share/fcitx5/addon/`, and `~/.lo
 
 ### Register the Hangul key as IM trigger (one-time)
 
+If you installed via `.deb` (v0.1.1+):
+```bash
+sinsebeolsik-p2-setup-trigger
+fcitx5-remote -r
+```
+
+If you built from source:
 ```bash
 ./scripts/setup-fcitx5-trigger.sh
 fcitx5-remote -r
 ```
 
-Idempotently appends `Hangul` (KeySym 0xff31) under `[Hotkey/TriggerKeys]` in `~/.config/fcitx5/config`. Safe to re-run.
+Both forms idempotently append `Hangul` (KeySym 0xff31) under `[Hotkey/TriggerKeys]` in `~/.config/fcitx5/config`. Safe to re-run.
 
 ### Add the IM in fcitx5-configtool
 
