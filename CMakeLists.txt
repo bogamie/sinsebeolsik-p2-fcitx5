@@ -25,4 +25,10 @@ add_definitions(-DFCITX_GETTEXT_DOMAIN=\"${GETTEXT_DOMAIN}\")
 
 add_subdirectory(src)
 
+option(SIN3P2_BUILD_TESTS "Build unit tests for sinsebeolsik-p2" ON)
+if(SIN3P2_BUILD_TESTS)
+    enable_testing()
+    add_subdirectory(tests)
+endif()
+
 feature_summary(WHAT ALL INCLUDE_QUIET_PACKAGES FATAL_ON_MISSING_REQUIRED_PACKAGES)

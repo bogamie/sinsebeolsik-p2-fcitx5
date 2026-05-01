@@ -1,0 +1,252 @@
+#include <catch2/catch_test_macros.hpp>
+
+#include <string>
+#include <vector>
+
+#include "automaton.h"
+
+using namespace sin3p2;
+
+namespace {
+
+// 입력 시퀀스를 차례로 적용하면서 commit을 모으고 마지막 preedit을 반환
+struct RunResult {
+    std::u32string committed;
+    std::u32string preedit;
+    State final_state;
+};
+
+RunResult run(const std::vector<Input>& inputs) {
+    State s;
+    std::u32string committed;
+    std::u32string preedit;
+    for (const auto& in : inputs) {
+        auto r = step(s, in);
+        committed += r.commit;
+        preedit = r.preedit;
+        s = r.state;
+    }
+    return {committed, preedit, s};
+}
+
+// 시뮬레이터에서 본 "전체 화면 표시" = committed + preedit
+std::u32string visible(const RunResult& r) {
+    return r.committed + r.preedit;
+}
+
+// shorthand
+InputCho   C(Cho c)   { return {c}; }
+InputJung  J(Jung j)  { return {j}; }
+InputVJung V(VJung v) { return {v}; }
+InputJong  G(Jong g)  { return {g}; }
+
+}  // namespace
+
+// ─── 시뮬레이터 검증 케이스 (Test 1: 도깨비불 없음) ───────────────────────────
+
+TEST_CASE("도깨비불 없음 — kfwR → '갈ㅓ'", "[automaton][dokkaebi]") {
+    // k(ㄱ) f(ㅏ) w(ㄹ jong) R(ㅓ)
+    auto r = run({C(Cho::G), J(Jung::A), G(Jong::R), J(Jung::EO)});
+    REQUIRE(r.committed == U"갈");
+    REQUIRE(r.preedit == U"ㅓ");
+    REQUIRE(visible(r) == U"갈ㅓ");
+}
+
+TEST_CASE("도깨비불 없음 — kfsF → '간ㅏ'", "[automaton][dokkaebi]") {
+    auto r = run({C(Cho::G), J(Jung::A), G(Jong::N), J(Jung::A)});
+    REQUIRE(r.committed == U"간");
+    REQUIRE(r.preedit == U"ㅏ");
+    REQUIRE(visible(r) == U"간ㅏ");
+}
+
+TEST_CASE("도깨비불 없음 — kfeR → '갑ㅓ'", "[automaton][dokkaebi]") {
+    auto r = run({C(Cho::G), J(Jung::A), G(Jong::B), J(Jung::EO)});
+    REQUIRE(r.committed == U"갑");
+    REQUIRE(r.preedit == U"ㅓ");
+    REQUIRE(visible(r) == U"갑ㅓ");
+}
+
+TEST_CASE("겹받침 분리 없음 — uFwcjD → '닭이'", "[automaton][cluster]") {
+    // u(ㄷ) F(ㅏ) w(ㄹ jong) c(ㄱ jong, 클러스터 ㄺ) j(ㅇ) D(ㅣ)
+    auto r = run({C(Cho::D), J(Jung::A), G(Jong::R), G(Jong::G),
+                  C(Cho::O), J(Jung::I)});
+    REQUIRE(r.committed == U"닭");
+    REQUIRE(r.preedit == U"이");
+    REQUIRE(visible(r) == U"닭이");
+}
+
+// ─── 가상 중성 (Test 3) ──────────────────────────────────────────────────────
+
+TEST_CASE("가상 중성 단축 — 의 (jid)", "[automaton][virtual]") {
+    auto r = run({C(Cho::O), V(VJung::EU), J(Jung::I)});
+    REQUIRE(r.committed.empty());
+    REQUIRE(r.preedit == U"의");
+}
+
+TEST_CASE("가상 중성 단축 — 위 (jod)", "[automaton][virtual]") {
+    auto r = run({C(Cho::O), V(VJung::U), J(Jung::I)});
+    REQUIRE(r.preedit == U"위");
+}
+
+TEST_CASE("가상 중성 단축 — 과 (k/f)", "[automaton][virtual]") {
+    auto r = run({C(Cho::G), V(VJung::O), J(Jung::A)});
+    REQUIRE(r.preedit == U"과");
+}
+
+TEST_CASE("가상 중성 단축 — 외/왜/워/웨", "[automaton][virtual]") {
+    REQUIRE(run({C(Cho::O), V(VJung::O),  J(Jung::I)}).preedit == U"외");
+    REQUIRE(run({C(Cho::O), V(VJung::O),  J(Jung::AE)}).preedit == U"왜");
+    REQUIRE(run({C(Cho::O), V(VJung::U),  J(Jung::EO)}).preedit == U"워");
+    REQUIRE(run({C(Cho::O), V(VJung::U),  J(Jung::E)}).preedit == U"웨");
+}
+
+TEST_CASE("정석 vs 단축 입력 동치 — 의/위/과", "[automaton][virtual]") {
+    // jGD (정석) vs jid (단축)
+    auto a = run({C(Cho::O), J(Jung::EU), J(Jung::I)});
+    auto b = run({C(Cho::O), V(VJung::EU), J(Jung::I)});
+    REQUIRE(a.preedit == b.preedit);
+    REQUIRE(a.preedit == U"의");
+
+    // jBD vs jod
+    auto c = run({C(Cho::O), J(Jung::U), J(Jung::I)});
+    auto d = run({C(Cho::O), V(VJung::U), J(Jung::I)});
+    REQUIRE(c.preedit == d.preedit);
+    REQUIRE(c.preedit == U"위");
+
+    // kVF vs k/f
+    auto e = run({C(Cho::G), J(Jung::O), J(Jung::A)});
+    auto f = run({C(Cho::G), V(VJung::O), J(Jung::A)});
+    REQUIRE(e.preedit == f.preedit);
+    REQUIRE(e.preedit == U"과");
+}
+
+// ─── 가상 중성 정착 (합성 실패 시) ────────────────────────────────────────────
+
+TEST_CASE("가상 중성 + jong 입력 → 가상→실제 정착 + jong 부착", "[automaton][virtual][jong]") {
+    // jof: ㅇ + 가상ㅜ + ㅍ jong → 웊
+    auto r = run({C(Cho::O), V(VJung::U), G(Jong::P)});
+    REQUIRE(r.preedit == U"웊");
+
+    // joe: ㅇ + 가상ㅜ + ㅂ jong → 웁
+    auto r2 = run({C(Cho::O), V(VJung::U), G(Jong::B)});
+    REQUIRE(r2.preedit == U"웁");
+
+    // j/r: ㅇ + 가상ㅗ + ㅌ jong → 옽
+    auto r3 = run({C(Cho::O), V(VJung::O), G(Jong::T)});
+    REQUIRE(r3.preedit == U"옽");
+}
+
+// ─── 백스페이스 ──────────────────────────────────────────────────────────────
+
+TEST_CASE("BS — kf '가' → 'ㄱ'", "[automaton][backspace]") {
+    auto r = run({C(Cho::G), J(Jung::A)});
+    REQUIRE(r.preedit == U"가");
+    auto bs = backspace(r.final_state);
+    REQUIRE(bs.preedit == U"ㄱ");
+}
+
+TEST_CASE("BS — kfw '갈' → '가' → 'ㄱ' → 빈", "[automaton][backspace]") {
+    auto r = run({C(Cho::G), J(Jung::A), G(Jong::R)});
+    REQUIRE(r.preedit == U"갈");
+
+    auto b1 = backspace(r.final_state);
+    REQUIRE(b1.preedit == U"가");
+
+    auto b2 = backspace(b1.state);
+    REQUIRE(b2.preedit == U"ㄱ");
+
+    auto b3 = backspace(b2.state);
+    REQUIRE(b3.preedit.empty());
+}
+
+TEST_CASE("BS — kfwkf '갈가' → '갈ㄱ'", "[automaton][backspace]") {
+    auto r = run({C(Cho::G), J(Jung::A), G(Jong::R),
+                  C(Cho::G), J(Jung::A)});
+    REQUIRE(r.committed == U"갈");
+    REQUIRE(r.preedit == U"가");
+
+    auto b1 = backspace(r.final_state);
+    REQUIRE(b1.preedit == U"ㄱ");
+    // commit은 자동기 영역 밖 — '갈'은 이미 호스트가 갖고 있음
+}
+
+TEST_CASE("BS — k/f '과' → '고' (복합 모음 분해)", "[automaton][backspace][virtual]") {
+    auto r = run({C(Cho::G), V(VJung::O), J(Jung::A)});
+    REQUIRE(r.preedit == U"과");
+
+    auto b1 = backspace(r.final_state);
+    REQUIRE(b1.preedit == U"고");
+
+    auto b2 = backspace(b1.state);
+    REQUIRE(b2.preedit == U"ㄱ");
+
+    auto b3 = backspace(b2.state);
+    REQUIRE(b3.preedit.empty());
+}
+
+TEST_CASE("BS — 클러스터 종성 분해 (닭 → 달)", "[automaton][backspace][cluster]") {
+    auto r = run({C(Cho::D), J(Jung::A), G(Jong::R), G(Jong::G)});
+    REQUIRE(r.preedit == U"닭");
+
+    auto b1 = backspace(r.final_state);
+    REQUIRE(b1.preedit == U"달");
+
+    auto b2 = backspace(b1.state);
+    REQUIRE(b2.preedit == U"다");
+}
+
+TEST_CASE("BS — 가상 중성 단독 (jo 후 BS → ㅇ)", "[automaton][backspace][virtual]") {
+    auto r = run({C(Cho::O), V(VJung::U)});
+    REQUIRE(r.preedit == U"우");  // 가상 ㅜ도 표시는 ㅜ로
+
+    auto b1 = backspace(r.final_state);
+    REQUIRE(b1.preedit == U"ㅇ");
+}
+
+// ─── 합성 모음 (UnitMix 정석 입력 — 둘 다 shift) ──────────────────────────────
+
+TEST_CASE("UnitMix 모음 — kVF '과', kVE '괘', kVD '괴'", "[automaton][unitmix]") {
+    REQUIRE(run({C(Cho::G), J(Jung::O), J(Jung::A)}).preedit  == U"과");
+    REQUIRE(run({C(Cho::G), J(Jung::O), J(Jung::AE)}).preedit == U"괘");
+    REQUIRE(run({C(Cho::G), J(Jung::O), J(Jung::I)}).preedit  == U"괴");
+}
+
+TEST_CASE("UnitMix 모음 — jBR '워', jBC '웨', jBD '위', jGD '의'",
+          "[automaton][unitmix]") {
+    REQUIRE(run({C(Cho::O), J(Jung::U),  J(Jung::EO)}).preedit == U"워");
+    REQUIRE(run({C(Cho::O), J(Jung::U),  J(Jung::E)}).preedit  == U"웨");
+    REQUIRE(run({C(Cho::O), J(Jung::U),  J(Jung::I)}).preedit  == U"위");
+    REQUIRE(run({C(Cho::O), J(Jung::EU), J(Jung::I)}).preedit  == U"의");
+}
+
+// ─── flush (포커스 잃음 등) ──────────────────────────────────────────────────
+
+TEST_CASE("flush commits in-progress syllable", "[automaton][flush]") {
+    auto r = run({C(Cho::G), J(Jung::A)});  // "가" 진행 중
+    auto f = flush(r.final_state);
+    REQUIRE(f.commit == U"가");
+    REQUIRE(f.state.empty());
+}
+
+TEST_CASE("flush on empty state is no-op", "[automaton][flush]") {
+    auto f = flush(State{});
+    REQUIRE(f.commit.empty());
+    REQUIRE(f.state.empty());
+}
+
+// ─── 기본 단음절 ─────────────────────────────────────────────────────────────
+
+TEST_CASE("기본 단음절 — 가/한/닭/힣", "[automaton][basic]") {
+    REQUIRE(run({C(Cho::G), J(Jung::A)}).preedit == U"가");
+    REQUIRE(run({C(Cho::H), J(Jung::A), G(Jong::N)}).preedit == U"한");
+    REQUIRE(run({C(Cho::D), J(Jung::A), G(Jong::R), G(Jong::G)}).preedit == U"닭");
+    REQUIRE(run({C(Cho::H), J(Jung::I), G(Jong::H)}).preedit == U"힣");
+}
+
+TEST_CASE("연속 음절 commit — 가나 (kFhF)", "[automaton][sequence]") {
+    // k(ㄱ) F(ㅏ) h(ㄴ cho) F(ㅏ) — 두 음절
+    auto r = run({C(Cho::G), J(Jung::A), C(Cho::N), J(Jung::A)});
+    REQUIRE(r.committed == U"가");
+    REQUIRE(r.preedit == U"나");
+    REQUIRE(visible(r) == U"가나");
+}
