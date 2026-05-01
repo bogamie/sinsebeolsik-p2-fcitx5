@@ -6,6 +6,7 @@
 #include <string_view>
 #include <system_error>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #include <fcitx-utils/i18n.h>
@@ -134,8 +135,8 @@ std::vector<fcitx::InputMethodEntry> Engine::listInputMethods() {
         /*name=*/_("Sinsebeolsik P2"),
         /*languageCode=*/"ko",
         /*addon=*/"sinsebeolsik-p2");
-    entry.setLabel("신P2")
-        .setIcon("fcitx-sinsebeolsik-p2")
+    entry.setLabel("한")
+        .setIcon("fcitx-sinsebeolsik-p2-symbolic")
         .setNativeName("신세벌식 P2")
         .setConfigurable(false);
     std::vector<fcitx::InputMethodEntry> entries;
@@ -226,8 +227,8 @@ void Engine::keyEvent(const fcitx::InputMethodEntry &,
         return;
     }
 
-    auto in = sin3p2::translate_p2(static_cast<char32_t>(unicode), state);
-    if (!in) {
+    auto act = sin3p2::translate_p2(static_cast<char32_t>(unicode), state);
+    if (!act) {
         // P2에 매핑 안 된 printable (숫자, 공백, 일부 기호) — flush + 통과
         auto r = sin3p2::flush(state);
         commit_text(ic, r.commit);
@@ -236,7 +237,20 @@ void Engine::keyEvent(const fcitx::InputMethodEntry &,
         return;
     }
 
-    auto r = sin3p2::step(state, *in);
+    if (auto* lit = std::get_if<sin3p2::LiteralText>(&*act)) {
+        // 기호 layer (.ist의 단순 코드포인트 매핑) — flush + 텍스트 commit.
+        // 빈 문자열이면 키 흡수만 (시뮬레이터 빈 슬롯, ex. shift+I/O).
+        auto r = sin3p2::flush(state);
+        commit_text(ic, r.commit);
+        state = sin3p2::State{};
+        commit_text(ic, lit->text);
+        set_preedit(ic, U"");
+        event.filterAndAccept();
+        return;
+    }
+
+    const auto& in = std::get<sin3p2::Input>(*act);
+    auto r = sin3p2::step(state, in);
     state = r.state;
     commit_text(ic, r.commit);
     set_preedit(ic, r.preedit);

@@ -2,6 +2,7 @@
 
 #include <string>
 #include <string_view>
+#include <variant>
 
 #include "automaton.h"
 #include "keymap.h"
@@ -23,17 +24,25 @@ RunQwerty run_qwerty(std::u32string_view keys) {
     std::u32string committed;
     std::u32string preedit;
     for (char32_t k : keys) {
-        auto in = translate_p2(k, s);
-        if (in) {
+        auto act = translate_p2(k, s);
+        if (!act) {
+            // 자모가 아님 — flush + 키 그대로 commit
+            auto f = flush(s);
+            committed += f.commit;
+            committed.push_back(k);
+            preedit.clear();
+            s = State{};
+        } else if (auto* in = std::get_if<Input>(&*act)) {
             auto r = step(s, *in);
             committed += r.commit;
             preedit = r.preedit;
             s = r.state;
         } else {
-            // 자모가 아님 — flush + 키 그대로 commit
+            // LiteralText — flush + 리터럴 commit (빈 문자열이면 흡수)
+            const auto& lit = std::get<LiteralText>(*act);
             auto f = flush(s);
             committed += f.commit;
-            committed.push_back(k);
+            committed += lit.text;
             preedit.clear();
             s = State{};
         }
@@ -410,4 +419,35 @@ TEST_CASE("keymap: shift jung 단독 (cho 없음) → 호환 자모", "[keymap][
     REQUIRE(visible(run_qwerty(U"F")) == U"ㅏ");
     REQUIRE(visible(run_qwerty(U"D")) == U"ㅣ");
     REQUIRE(visible(run_qwerty(U"V")) == U"ㅗ");
+}
+
+// ─── 오른손 uppercase 기호 layer (.ist 0x48..0x5A 매핑) ──────────────────────
+
+TEST_CASE("keymap: 오른손 uppercase 기호 — 빈 state", "[keymap][symbol]") {
+    REQUIRE(visible(run_qwerty(U"H")) == U"□");
+    REQUIRE(visible(run_qwerty(U"J")) == U"'");
+    REQUIRE(visible(run_qwerty(U"K")) == U"\"");
+    REQUIRE(visible(run_qwerty(U"L")) == U"·");
+    REQUIRE(visible(run_qwerty(U"M")) == U"…");
+    REQUIRE(visible(run_qwerty(U"N")) == U"―");
+    REQUIRE(visible(run_qwerty(U"P")) == U";");
+    REQUIRE(visible(run_qwerty(U"U")) == U"○");
+    REQUIRE(visible(run_qwerty(U"Y")) == U"×");
+    REQUIRE(visible(run_qwerty(U"Z")) == U"ㆍ");
+    REQUIRE(visible(run_qwerty(U"\"")) == U"/");  // Shift+'
+}
+
+TEST_CASE("keymap: 기호 — 음절 commit 후 기호 출력", "[keymap][symbol]") {
+    // 진행 중 음절은 commit, 그 뒤 기호.
+    REQUIRE(visible(run_qwerty(U"kFH")) == U"가□");
+    REQUIRE(visible(run_qwerty(U"kFP")) == U"가;");
+    REQUIRE(visible(run_qwerty(U"kFY")) == U"가×");
+}
+
+TEST_CASE("keymap: shift+I/O — 흡수 (빈 텍스트)", "[keymap][symbol]") {
+    // .ist 0x49, 0x4F 미정의 → 빈 텍스트로 흡수. 음절은 flush됨.
+    REQUIRE(visible(run_qwerty(U"I")) == U"");
+    REQUIRE(visible(run_qwerty(U"O")) == U"");
+    REQUIRE(visible(run_qwerty(U"kFI")) == U"가");
+    REQUIRE(visible(run_qwerty(U"kFO")) == U"가");
 }

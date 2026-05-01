@@ -287,6 +287,37 @@ std::optional<Jong> name_to_jong(std::string_view s) {
     return std::nullopt;
 }
 
+// UTF-8 → UTF-32. 문자 한정 (TOML이 잘린 시퀀스를 안 주리라 가정).
+std::u32string utf8_to_utf32(std::string_view s) {
+    std::u32string out;
+    std::size_t i = 0;
+    while (i < s.size()) {
+        unsigned char c = static_cast<unsigned char>(s[i]);
+        char32_t cp = 0;
+        std::size_t n = 1;
+        if (c < 0x80) {
+            cp = c;
+        } else if ((c & 0xE0) == 0xC0) {
+            cp = c & 0x1F; n = 2;
+        } else if ((c & 0xF0) == 0xE0) {
+            cp = c & 0x0F; n = 3;
+        } else if ((c & 0xF8) == 0xF0) {
+            cp = c & 0x07; n = 4;
+        } else {
+            // 잘린 / 잘못된 — 복구 없이 그대로 떨어뜨림
+            ++i;
+            continue;
+        }
+        if (i + n > s.size()) break;
+        for (std::size_t k = 1; k < n; ++k) {
+            cp = (cp << 6) | (static_cast<unsigned char>(s[i + k]) & 0x3F);
+        }
+        out.push_back(cp);
+        i += n;
+    }
+    return out;
+}
+
 // rule.output 테이블 → KeyOutput. 정확히 1개의 슬롯만 채워져야 함.
 std::optional<KeyOutput> parse_output(const toml::table& tbl) {
     int filled = 0;
@@ -316,6 +347,10 @@ std::optional<KeyOutput> parse_output(const toml::table& tbl) {
         out = InputJong{*j};
         ++filled;
     }
+    if (auto v = tbl["text"].value<std::string>()) {
+        out = LiteralText{utf8_to_utf32(*v)};
+        ++filled;
+    }
     if (auto v = tbl["passthrough"].value<bool>()) {
         if (*v) {
             out = PassThrough{};
@@ -334,19 +369,21 @@ void Keymap::set_rules(char32_t key, std::vector<Rule> rules) {
     rules_[key] = std::move(rules);
 }
 
-std::optional<Input> Keymap::translate(char32_t k, const State& s) const {
+std::optional<TranslateAction> Keymap::translate(char32_t k, const State& s) const {
     auto it = rules_.find(k);
     if (it == rules_.end()) return std::nullopt;
     auto preds = predicates_of(s);
     for (const auto& rule : it->second) {
         if (rule.when && !rule.when->eval(preds)) continue;
         return std::visit(
-            [](auto&& v) -> std::optional<Input> {
+            [](auto&& v) -> std::optional<TranslateAction> {
                 using T = std::decay_t<decltype(v)>;
                 if constexpr (std::is_same_v<T, PassThrough>) {
                     return std::nullopt;
+                } else if constexpr (std::is_same_v<T, LiteralText>) {
+                    return TranslateAction{v};
                 } else {
-                    return Input{v};
+                    return TranslateAction{Input{v}};
                 }
             },
             rule.output);
@@ -451,7 +488,7 @@ void install_default_keymap(Keymap km) {
     g_default = std::make_unique<Keymap>(std::move(km));
 }
 
-std::optional<Input> translate_p2(char32_t k, const State& s) {
+std::optional<TranslateAction> translate_p2(char32_t k, const State& s) {
     return default_keymap().translate(k, s);
 }
 
