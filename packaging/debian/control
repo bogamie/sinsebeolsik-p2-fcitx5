@@ -1,0 +1,37 @@
+Source: fcitx5-sinsebeolsik-p2
+Section: utils
+Priority: optional
+Maintainer: Bogamie <bogamie02@gmail.com>
+Build-Depends: debhelper-compat (= 13),
+               cmake,
+               ninja-build,
+               extra-cmake-modules,
+               libfcitx5-dev,
+               libfmt-dev,
+               libtomlplusplus-dev,
+               gettext,
+               pkg-config
+Standards-Version: 4.6.2
+Rules-Requires-Root: no
+Homepage: https://github.com/Bogamie/sinsebeolsik-p2-fcitx5
+Vcs-Git: https://github.com/Bogamie/sinsebeolsik-p2-fcitx5.git
+Vcs-Browser: https://github.com/Bogamie/sinsebeolsik-p2-fcitx5
+
+Package: fcitx5-sinsebeolsik-p2
+Architecture: any
+Depends: ${shlibs:Depends},
+         ${misc:Depends},
+         fcitx5
+Description: Sinsebeolsik P2 Hangul input method for fcitx5
+ Sinsebeolsik P2 (신세벌식 P2) is a three-set Hangul keyboard layout
+ with one-key shortcut (galmadeuli) input for selected diphthongs and
+ jongseong clusters. This package provides a fcitx5 input method engine
+ implementing the layout from a TOML keymap with a hand-rolled state
+ machine.
+ .
+ First-class support is provided for the Totem 38-key split keyboard
+ with graceful fallback to standard 60% / TKL / full-size layouts.
+ .
+ 리눅스 fcitx5용 신세벌식 P2 한글 입력기. 토템 38키 분할 키보드를
+ 일등 시민으로 지원하며, 표준 60% / TKL / 풀사이즈 키보드도 보조
+ 대상으로 지원합니다.

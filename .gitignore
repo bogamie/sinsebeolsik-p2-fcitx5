@@ -34,3 +34,11 @@ Thumbs.db
 # Patches
 *.orig
 *.rej
+
+# Debian packaging artifacts (debuild output lands in project root)
+*.deb
+*.dsc
+*.changes
+*.buildinfo
+*.tar.xz
+*.tar.gz

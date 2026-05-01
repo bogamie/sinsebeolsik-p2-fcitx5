@@ -250,3 +250,158 @@ TEST_CASE("연속 음절 commit — 가나 (kFhF)", "[automaton][sequence]") {
     REQUIRE(r.preedit == U"나");
     REQUIRE(visible(r) == U"가나");
 }
+
+// ─── 모든 클러스터 종성 합성 ────────────────────────────────────────────────
+
+TEST_CASE("cluster ㄳ — 가 + ㄱ + ㅅ", "[automaton][cluster]") {
+    auto r = run({C(Cho::G), J(Jung::A), G(Jong::G), G(Jong::S)});
+    REQUIRE(r.preedit == U"갃");
+}
+TEST_CASE("cluster ㄵ — 가 + ㄴ + ㅈ", "[automaton][cluster]") {
+    auto r = run({C(Cho::G), J(Jung::A), G(Jong::N), G(Jong::J)});
+    REQUIRE(r.preedit == U"갅");
+}
+TEST_CASE("cluster ㄶ — 가 + ㄴ + ㅎ", "[automaton][cluster]") {
+    auto r = run({C(Cho::G), J(Jung::A), G(Jong::N), G(Jong::H)});
+    REQUIRE(r.preedit == U"갆");
+}
+TEST_CASE("cluster ㄻ — 갈 + ㅁ", "[automaton][cluster]") {
+    auto r = run({C(Cho::G), J(Jung::A), G(Jong::R), G(Jong::M)});
+    REQUIRE(r.preedit == U"갊");
+}
+TEST_CASE("cluster ㄽ — 갈 + ㅅ", "[automaton][cluster]") {
+    auto r = run({C(Cho::G), J(Jung::A), G(Jong::R), G(Jong::S)});
+    REQUIRE(r.preedit == U"갌");
+}
+TEST_CASE("cluster ㄾ — 갈 + ㅌ", "[automaton][cluster]") {
+    auto r = run({C(Cho::G), J(Jung::A), G(Jong::R), G(Jong::T)});
+    REQUIRE(r.preedit == U"갍");
+}
+TEST_CASE("cluster ㄿ — 갈 + ㅍ", "[automaton][cluster]") {
+    auto r = run({C(Cho::G), J(Jung::A), G(Jong::R), G(Jong::P)});
+    REQUIRE(r.preedit == U"갎");
+}
+TEST_CASE("cluster ㅀ — 갈 + ㅎ", "[automaton][cluster]") {
+    auto r = run({C(Cho::G), J(Jung::A), G(Jong::R), G(Jong::H)});
+    REQUIRE(r.preedit == U"갏");
+}
+TEST_CASE("cluster ㅄ — 갑 + ㅅ", "[automaton][cluster]") {
+    auto r = run({C(Cho::G), J(Jung::A), G(Jong::B), G(Jong::S)});
+    REQUIRE(r.preedit == U"값");
+}
+TEST_CASE("cluster ㄲ — 가 + ㄱ + ㄱ", "[automaton][cluster]") {
+    auto r = run({C(Cho::G), J(Jung::A), G(Jong::G), G(Jong::G)});
+    REQUIRE(r.preedit == U"갂");
+}
+TEST_CASE("cluster ㅆ — 가 + ㅅ + ㅅ", "[automaton][cluster]") {
+    auto r = run({C(Cho::G), J(Jung::A), G(Jong::S), G(Jong::S)});
+    REQUIRE(r.preedit == U"갔");
+}
+
+// ─── 클러스터 합성 실패 → commit + 새 음절 ──────────────────────────────────
+
+TEST_CASE("cluster 실패 — 갓 + ㄴ → 갓 + ㄴ standalone", "[automaton][cluster]") {
+    // ㅅ + ㄴ 클러스터는 .ist에 없음
+    auto r = run({C(Cho::G), J(Jung::A), G(Jong::S), G(Jong::N)});
+    REQUIRE(r.committed == U"갓");
+    REQUIRE(r.preedit == U"ㄴ");
+}
+
+// ─── BS — 모든 클러스터 분해 ────────────────────────────────────────────────
+
+TEST_CASE("BS — ㄳ → ㄱ", "[automaton][backspace][cluster]") {
+    auto r = run({C(Cho::G), J(Jung::A), G(Jong::G), G(Jong::S)});
+    auto b = backspace(r.final_state);
+    REQUIRE(b.preedit == U"각");
+}
+TEST_CASE("BS — ㄵ → ㄴ", "[automaton][backspace][cluster]") {
+    auto r = run({C(Cho::G), J(Jung::A), G(Jong::N), G(Jong::J)});
+    auto b = backspace(r.final_state);
+    REQUIRE(b.preedit == U"간");
+}
+TEST_CASE("BS — ㄶ → ㄴ", "[automaton][backspace][cluster]") {
+    auto r = run({C(Cho::G), J(Jung::A), G(Jong::N), G(Jong::H)});
+    auto b = backspace(r.final_state);
+    REQUIRE(b.preedit == U"간");
+}
+TEST_CASE("BS — ㄻ → ㄹ", "[automaton][backspace][cluster]") {
+    auto r = run({C(Cho::G), J(Jung::A), G(Jong::R), G(Jong::M)});
+    auto b = backspace(r.final_state);
+    REQUIRE(b.preedit == U"갈");
+}
+TEST_CASE("BS — ㅄ → ㅂ", "[automaton][backspace][cluster]") {
+    auto r = run({C(Cho::G), J(Jung::A), G(Jong::B), G(Jong::S)});
+    auto b = backspace(r.final_state);
+    REQUIRE(b.preedit == U"갑");
+}
+
+// ─── BS — 복합 모음 분해 ────────────────────────────────────────────────────
+
+TEST_CASE("BS — ㅘ → ㅗ (실제 jung UnitMix 분해)", "[automaton][backspace]") {
+    auto r = run({C(Cho::G), J(Jung::O), J(Jung::A)});
+    REQUIRE(r.preedit == U"과");
+    auto b = backspace(r.final_state);
+    REQUIRE(b.preedit == U"고");
+}
+TEST_CASE("BS — ㅙ → ㅗ", "[automaton][backspace]") {
+    auto r = run({C(Cho::G), J(Jung::O), J(Jung::AE)});
+    REQUIRE(r.preedit == U"괘");
+    auto b = backspace(r.final_state);
+    REQUIRE(b.preedit == U"고");
+}
+TEST_CASE("BS — ㅢ → ㅡ", "[automaton][backspace]") {
+    auto r = run({C(Cho::O), J(Jung::EU), J(Jung::I)});
+    REQUIRE(r.preedit == U"의");
+    auto b = backspace(r.final_state);
+    REQUIRE(b.preedit == U"으");
+}
+TEST_CASE("BS — ㅟ → ㅜ", "[automaton][backspace]") {
+    auto r = run({C(Cho::O), J(Jung::U), J(Jung::I)});
+    REQUIRE(r.preedit == U"위");
+    auto b = backspace(r.final_state);
+    REQUIRE(b.preedit == U"우");
+}
+
+// ─── 빈 state BS → no-op (호스트 위임) ──────────────────────────────────────
+
+TEST_CASE("BS — 빈 state → 빈 결과", "[automaton][backspace]") {
+    auto b = backspace(State{});
+    REQUIRE(b.preedit.empty());
+    REQUIRE(b.state.empty());
+}
+
+// ─── 쌍자음 (UnitMix CHO) ───────────────────────────────────────────────────
+
+TEST_CASE("쌍자음 — ㄱ ㄱ → ㄲ", "[automaton][double-cho]") {
+    auto r = run({C(Cho::G), C(Cho::G)});
+    REQUIRE(r.preedit == U"ㄲ");
+}
+TEST_CASE("쌍자음 — ㄷ ㄷ → ㄸ", "[automaton][double-cho]") {
+    auto r = run({C(Cho::D), C(Cho::D)});
+    REQUIRE(r.preedit == U"ㄸ");
+}
+TEST_CASE("쌍자음 + jung → 음절합성 — ㄸㅏ → 따", "[automaton][double-cho]") {
+    auto r = run({C(Cho::D), C(Cho::D), J(Jung::A)});
+    REQUIRE(r.preedit == U"따");
+}
+TEST_CASE("쌍자음 + jung + jong — ㅉㅏㄼ → 짧", "[automaton][double-cho][cluster]") {
+    auto r = run({C(Cho::J), C(Cho::J), J(Jung::A), G(Jong::R), G(Jong::B)});
+    REQUIRE(r.preedit == U"짧");
+}
+
+// ─── 다른 cho 두 번 → 쌍자음 아님, 새 음절 ──────────────────────────────────
+
+TEST_CASE("다른 cho — ㄱ ㄴ → ㄱ commit, ㄴ preedit", "[automaton][boundary]") {
+    auto r = run({C(Cho::G), C(Cho::N)});
+    REQUIRE(r.committed == U"ㄱ");
+    REQUIRE(r.preedit == U"ㄴ");
+}
+
+// ─── 가상 중성 + 합성 실패 jung → 정착 + standalone jung ─────────────────────
+
+TEST_CASE("vjung U + ㅏ → 합성 안 됨, 우 commit + ㅏ standalone", "[automaton][virtual]") {
+    // combine_virtual_jung(U, A)는 nullopt — 합성 실패 → vjung→real cast 후 commit, ㅏ standalone
+    auto r = run({C(Cho::O), V(VJung::U), J(Jung::A)});
+    REQUIRE(r.committed == U"우");
+    REQUIRE(r.preedit == U"ㅏ");
+}

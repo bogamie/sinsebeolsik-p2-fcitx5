@@ -1,0 +1,14 @@
+fcitx5-sinsebeolsik-p2 (0.1.0) unstable; urgency=medium
+
+  * Initial release.
+  * Hangul automaton with Sinsebeolsik P2 simulator-verified behavior:
+    no dokkaebibul, no auto-IEUNG, no jong cluster splitting on next vowel,
+    real-vs-virtual jung distinction, ssang-jaeum via doubled cho keystroke.
+  * TOML-driven keymap loadable from
+    ~/.local/share/fcitx5/sinsebeolsik-p2/sinsebeolsik_p2.toml
+    or /usr/share/fcitx5/sinsebeolsik-p2/sinsebeolsik_p2.toml,
+    with embedded fallback compiled in.
+  * Helper script setup-fcitx5-trigger.sh registers the Hangul keysym
+    as a global IM trigger.
+
+ -- Bogamie <bogamie02@gmail.com>  Fri, 01 May 2026 00:00:00 +0900

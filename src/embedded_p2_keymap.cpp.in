@@ -1,0 +1,11 @@
+// Generated from keymaps/sinsebeolsik_p2.toml at build time. Do not edit.
+// CMake configure_file이 raw string literal 안의 placeholder를 키맵 본문으로 치환한다.
+// 런타임에 사용자 override TOML이 발견되지 않으면 이 임베드본이 사용된다.
+
+#include "keymap.h"
+
+namespace sin3p2 {
+
+const char* const EMBEDDED_P2_KEYMAP_TOML = R"P2KM_PAYLOAD(@P2_KEYMAP_TOML_CONTENT@)P2KM_PAYLOAD";
+
+}  // namespace sin3p2

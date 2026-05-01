@@ -1,7 +1,10 @@
 #include "engine.h"
 
+#include <cstdlib>
+#include <filesystem>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <utility>
 #include <vector>
 
@@ -69,6 +72,51 @@ void commit_text(fcitx::InputContext *ic, std::u32string_view text) {
     ic->commitString(to_utf8(text));
 }
 
+// 사용자 override 또는 시스템 설치본 keymap을 찾아 로드. 못 찾거나
+// 파싱 실패면 임베드된 기본값(=빌드 시점의 keymaps/sinsebeolsik_p2.toml)이
+// lazy-load되어 그대로 쓰인다.
+//
+// 검색 순서 (윗줄이 우선):
+//   1. $SIN3P2_KEYMAP                                          (개발자 override)
+//   2. $XDG_CONFIG_HOME/sinsebeolsik-p2/sinsebeolsik_p2.toml
+//   3. ~/.config/sinsebeolsik-p2/sinsebeolsik_p2.toml          (사용자 커스텀)
+//   4. ~/.local/share/fcitx5/sinsebeolsik-p2/sinsebeolsik_p2.toml
+//   5. /usr/share/fcitx5/sinsebeolsik-p2/sinsebeolsik_p2.toml
+//   6. /usr/local/share/fcitx5/sinsebeolsik-p2/sinsebeolsik_p2.toml
+void try_load_user_keymap() {
+    namespace fs = std::filesystem;
+    std::vector<fs::path> candidates;
+
+    if (const char* env = std::getenv("SIN3P2_KEYMAP"); env && *env)
+        candidates.emplace_back(env);
+
+    if (const char* xdg = std::getenv("XDG_CONFIG_HOME"); xdg && *xdg)
+        candidates.emplace_back(fs::path(xdg) / "sinsebeolsik-p2/sinsebeolsik_p2.toml");
+
+    if (const char* home = std::getenv("HOME"); home && *home) {
+        fs::path h(home);
+        candidates.emplace_back(h / ".config/sinsebeolsik-p2/sinsebeolsik_p2.toml");
+        candidates.emplace_back(h / ".local/share/fcitx5/sinsebeolsik-p2/sinsebeolsik_p2.toml");
+    }
+    candidates.emplace_back("/usr/share/fcitx5/sinsebeolsik-p2/sinsebeolsik_p2.toml");
+    candidates.emplace_back("/usr/local/share/fcitx5/sinsebeolsik-p2/sinsebeolsik_p2.toml");
+
+    for (const auto& p : candidates) {
+        std::error_code ec;
+        if (!fs::exists(p, ec)) continue;
+        if (auto km = sin3p2::load_keymap_from_file(p)) {
+            sin3p2::install_default_keymap(std::move(*km));
+            FCITX_LOGC(::sinsebeolsik_p2::p2_log, Info)
+                << "Loaded P2 keymap from: " << p.string();
+            return;
+        }
+        FCITX_LOGC(::sinsebeolsik_p2::p2_log, Warn)
+            << "Failed to parse keymap at " << p.string()
+            << " — continuing search";
+    }
+    FCITX_LOGC(::sinsebeolsik_p2::p2_log, Info) << "Using embedded P2 keymap";
+}
+
 }  // namespace
 
 Engine::Engine(fcitx::Instance *instance)
@@ -76,6 +124,7 @@ Engine::Engine(fcitx::Instance *instance)
       factory_([](fcitx::InputContext &) { return new P2InputState; }) {
     instance_->inputContextManager().registerProperty(
         "sinsebeolsik-p2-state", &factory_);
+    try_load_user_keymap();
     P2_INFO() << "Sinsebeolsik P2 engine constructed (M3 wiring)";
 }
 

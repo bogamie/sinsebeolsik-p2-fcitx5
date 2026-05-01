@@ -1,0 +1,10 @@
+# debhelper artifacts
+*.debhelper
+*.debhelper.log
+*.substvars
+debhelper-build-stamp
+files
+
+# build artifacts under packaging/
+debian/fcitx5-sinsebeolsik-p2/
+debian/.debhelper/

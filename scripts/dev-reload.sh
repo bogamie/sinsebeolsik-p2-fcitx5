@@ -47,11 +47,14 @@ fi
 step "Installing to ~/.local"
 ADDON_LIB_DIR="${HOME}/.local/lib/fcitx5"
 ADDON_CONF_DIR="${HOME}/.local/share/fcitx5/addon"
-mkdir -p "${ADDON_LIB_DIR}" "${ADDON_CONF_DIR}"
+KEYMAP_DIR="${HOME}/.local/share/fcitx5/sinsebeolsik-p2"
+mkdir -p "${ADDON_LIB_DIR}" "${ADDON_CONF_DIR}" "${KEYMAP_DIR}"
 install -m 755 "${BUILD}/src/libsinsebeolsik-p2.so" "${ADDON_LIB_DIR}/"
 install -m 644 "${BUILD}/src/sinsebeolsik-p2.conf" "${ADDON_CONF_DIR}/"
+install -m 644 "${ROOT}/keymaps/sinsebeolsik_p2.toml" "${KEYMAP_DIR}/"
 echo "  ${ADDON_LIB_DIR}/libsinsebeolsik-p2.so"
 echo "  ${ADDON_CONF_DIR}/sinsebeolsik-p2.conf"
+echo "  ${KEYMAP_DIR}/sinsebeolsik_p2.toml"
 
 # ─── 5. fcitx5 재시작 ────────────────────────────────────────────────────────
 if [[ "${NO_RESTART}" -eq 1 ]]; then
@@ -90,3 +93,6 @@ echo "주의: 매번 'fcitx5 -d'를 직접 실행하시려면 아래를 ~/.profi
 echo "  export FCITX_ADDON_DIRS=\"${ADDON_LIB_DIR}:${SYS_ADDON_DIR}\""
 echo
 echo "fcitx5-configtool 에서 Sinsebeolsik P2 추가 후 IM 토글 (보통 Ctrl+Space 또는 Hangul)."
+echo
+echo "Hangul 키를 트리거로 처음 등록하려면 한 번만:"
+echo "  ${ROOT}/scripts/setup-fcitx5-trigger.sh"
