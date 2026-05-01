@@ -24,7 +24,7 @@ Alpha. Validated for daily Hangul typing on Ubuntu 24.04 LTS. Forward compatibil
 ```bash
 sudo apt install \
     build-essential cmake ninja-build \
-    extra-cmake-modules libfcitx5-dev libfmt-dev \
+    extra-cmake-modules libfcitx5core-dev libfmt-dev \
     libtomlplusplus-dev gettext pkg-config
 ```
 
