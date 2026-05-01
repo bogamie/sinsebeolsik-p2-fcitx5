@@ -31,14 +31,25 @@ namespace sin3p2 {
 extern const char* const EMBEDDED_P2_KEYMAP_TOML;
 
 // QWERTY 한 키에 대해 결정된 출력 1개.
-// rule이 매치되면 자동기에 흘러갈 Input이거나, "이 키는 자모가 아님" passthrough 마커.
+//   - Input* 4종: 자동기에 흘러갈 자모.
+//   - LiteralText: 자동기 flush 후 호스트로 commit할 리터럴 문자열
+//                  (.ist의 단순 코드포인트 매핑 — 기호 layer). 빈 문자열이면 키 흡수만.
+//   - PassThrough: 키맵 매핑 없음 마커 (translate가 nullopt로 변환).
 struct PassThrough {};
-using KeyOutput = std::variant<InputCho, InputJung, InputVJung, InputJong, PassThrough>;
+struct LiteralText { std::u32string text; };
+using KeyOutput = std::variant<InputCho, InputJung, InputVJung, InputJong,
+                               LiteralText, PassThrough>;
+
+// translate 결과: 자모 입력 또는 리터럴 텍스트.
+using TranslateAction = std::variant<Input, LiteralText>;
 
 class Keymap {
 public:
-    // 한 글자 + 현재 state → 자모 입력 (없으면 nullopt = passthrough)
-    std::optional<Input> translate(char32_t qwerty_key, const State& state) const;
+    // 한 글자 + 현재 state → 액션 (자모 입력 / 리터럴 / passthrough)
+    //   nullopt           = passthrough (호스트가 키 받음)
+    //   Input             = 자동기 step 호출
+    //   LiteralText       = 자동기 flush 후 텍스트 commit (빈 문자열이면 commit 없음)
+    std::optional<TranslateAction> translate(char32_t qwerty_key, const State& state) const;
 
     // 디버깅/테스트용
     std::size_t key_count() const noexcept { return rules_.size(); }
@@ -75,6 +86,6 @@ const Keymap& default_keymap();
 void install_default_keymap(Keymap km);
 
 // 기존 시그니처 유지 — 내부적으로 default_keymap().translate()를 호출.
-std::optional<Input> translate_p2(char32_t qwerty_key, const State& state);
+std::optional<TranslateAction> translate_p2(char32_t qwerty_key, const State& state);
 
 }  // namespace sin3p2

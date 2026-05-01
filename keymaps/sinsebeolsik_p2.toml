@@ -284,10 +284,63 @@ rules = [{ output = { jung = "YA" } }]
 key = "X"
 rules = [{ output = { jung = "YO" } }]
 
-# Z (shift) → 옛한글 ㆍ — 미지원, passthrough.
+# Z (shift) → 옛한글 ㆍ. .ist는 real jung F를 박지만 v1 자동기는 yet-Hangul jung을
+# 합성/조립하지 않는다 → 가시 결과만 맞추기 위해 ㆍ(U+318D) 호환 자모로 commit.
 [[key]]
 key = "Z"
-rules = [{ output = { passthrough = true } }]
+rules = [{ output = { text = "ㆍ" } }]
 
-# 오른손 uppercase (H/J/K/L/M/N/U/Y/P/I/O)는 항목 자체가 없음 → 자동으로 passthrough.
-# (시뮬레이터에선 □ ' " · … ― ○ × ; 등 기호 치환이지만 v1은 호스트로 통과시킨다.)
+# ─── 오른손 uppercase = 기호 layer ──────────────────────────────────────────────
+# .ist 0x48..0x5A 단순 코드포인트 매핑. 자동기 state를 flush 후 텍스트 commit.
+# I (0x49), O (0x4F)는 .ist 자체에 항목 없음 — 다른 passthrough 키들은 명시적인데
+# 이 둘만 빠짐 → 의도적 미바인드로 해석, 빈 텍스트로 흡수 (시뮬레이터 빈 슬롯).
+
+[[key]]
+key = "H"
+rules = [{ output = { text = "□" } }]    # U+25A1
+
+[[key]]
+key = "J"
+rules = [{ output = { text = "'" } }]    # U+0027
+
+[[key]]
+key = "K"
+rules = [{ output = { text = "\"" } }]   # U+0022
+
+[[key]]
+key = "L"
+rules = [{ output = { text = "·" } }]    # U+00B7
+
+[[key]]
+key = "M"
+rules = [{ output = { text = "…" } }]    # U+2026
+
+[[key]]
+key = "N"
+rules = [{ output = { text = "―" } }]    # U+2015
+
+[[key]]
+key = "P"
+rules = [{ output = { text = ";" } }]    # U+003B
+
+[[key]]
+key = "U"
+rules = [{ output = { text = "○" } }]    # U+25CB
+
+[[key]]
+key = "Y"
+rules = [{ output = { text = "×" } }]    # U+00D7
+
+[[key]]
+key = "I"
+rules = [{ output = { text = "" } }]     # 흡수 (.ist 미정의)
+
+[[key]]
+key = "O"
+rules = [{ output = { text = "" } }]     # 흡수 (.ist 미정의)
+
+# ─── 시프트된 다른 기호 키 ───────────────────────────────────────────────────────
+# 0x22 (Shift+') → / per .ist. (lowercase '는 ㅌ cho.)
+[[key]]
+key = "\""
+rules = [{ output = { text = "/" } }]    # U+002F

@@ -6,6 +6,7 @@
 #include <string_view>
 #include <system_error>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #include <fcitx-utils/i18n.h>
@@ -24,6 +25,7 @@
 
 #include "automaton.h"
 #include "keymap.h"
+#include "qwerty_translator.h"
 
 namespace sinsebeolsik_p2 {
 
@@ -117,6 +119,14 @@ void try_load_user_keymap() {
     FCITX_LOGC(::sinsebeolsik_p2::p2_log, Info) << "Using embedded P2 keymap";
 }
 
+// 시스템 XKB가 비-QWERTY(예: Canary)일 때도 keymap.toml의 QWERTY-기준
+// lookup이 깨지지 않도록, 들어온 keycode를 US QWERTY 기준으로 재해석.
+// C++11 함수-내 static = 스레드 안전 lazy init, 프로세스 종료 시까지 1회.
+const sin3p2::QwertyTranslator& qwerty_translator() {
+    static const sin3p2::QwertyTranslator t;
+    return t;
+}
+
 }  // namespace
 
 Engine::Engine(fcitx::Instance *instance)
@@ -134,8 +144,8 @@ std::vector<fcitx::InputMethodEntry> Engine::listInputMethods() {
         /*name=*/_("Sinsebeolsik P2"),
         /*languageCode=*/"ko",
         /*addon=*/"sinsebeolsik-p2");
-    entry.setLabel("신P2")
-        .setIcon("fcitx-sinsebeolsik-p2")
+    entry.setLabel("한")
+        .setIcon("fcitx-sinsebeolsik-p2-symbolic")
         .setNativeName("신세벌식 P2")
         .setConfigurable(false);
     std::vector<fcitx::InputMethodEntry> entries;
@@ -215,8 +225,16 @@ void Engine::keyEvent(const fcitx::InputMethodEntry &,
         return;
     }
 
+    // 시스템 XKB가 비-QWERTY(Canary 등)일 수 있으므로, keymap.toml lookup
+    // 이전에 keycode를 US QWERTY 기준 keysym으로 재해석한다. 초기화 실패 시
+    // (xkeyboard-config 미설치) 원래 sym으로 fallback — QWERTY 환경에선 동일.
+    const bool shift = modifiers.test(fcitx::KeyState::Shift);
+    const auto qwerty_sym = qwerty_translator().translate(
+        key.code(), shift, static_cast<std::uint32_t>(key.sym()));
+
     // Printable로 변환
-    const auto unicode = fcitx::Key::keySymToUnicode(key.sym());
+    const auto unicode = fcitx::Key::keySymToUnicode(
+        static_cast<fcitx::KeySym>(qwerty_sym));
     if (unicode == 0) {
         // 비문자 키 (방향키, F-키 등) — 진행 중 음절 commit 후 통과
         auto r = sin3p2::flush(state);
@@ -226,8 +244,8 @@ void Engine::keyEvent(const fcitx::InputMethodEntry &,
         return;
     }
 
-    auto in = sin3p2::translate_p2(static_cast<char32_t>(unicode), state);
-    if (!in) {
+    auto act = sin3p2::translate_p2(static_cast<char32_t>(unicode), state);
+    if (!act) {
         // P2에 매핑 안 된 printable (숫자, 공백, 일부 기호) — flush + 통과
         auto r = sin3p2::flush(state);
         commit_text(ic, r.commit);
@@ -236,7 +254,20 @@ void Engine::keyEvent(const fcitx::InputMethodEntry &,
         return;
     }
 
-    auto r = sin3p2::step(state, *in);
+    if (auto* lit = std::get_if<sin3p2::LiteralText>(&*act)) {
+        // 기호 layer (.ist의 단순 코드포인트 매핑) — flush + 텍스트 commit.
+        // 빈 문자열이면 키 흡수만 (시뮬레이터 빈 슬롯, ex. shift+I/O).
+        auto r = sin3p2::flush(state);
+        commit_text(ic, r.commit);
+        state = sin3p2::State{};
+        commit_text(ic, lit->text);
+        set_preedit(ic, U"");
+        event.filterAndAccept();
+        return;
+    }
+
+    const auto& in = std::get<sin3p2::Input>(*act);
+    auto r = sin3p2::step(state, in);
     state = r.state;
     commit_text(ic, r.commit);
     set_preedit(ic, r.preedit);

@@ -1,3 +1,21 @@
+fcitx5-sinsebeolsik-p2 (0.1.2) unstable; urgency=medium
+
+  * Backspace polish: preserve single-key jongs, restore frozen virtual
+    jung after jong/jung removal so re-pressing the same vowel re-composes
+    (e.g. joc → 웨 → BS → 우(virtual ㅜ) → f → 웊).
+  * Right-hand symbol layer: shifted right-hand keys (H/J/K/L/M/N/U/Y/P,
+    Shift+', Shift+Z) emit literal codepoints (□ ' " · … ― ; ○ × / ㆍ)
+    per the .ist simulator spec. Shift+I/O are absorbed (empty slot).
+  * Internal QWERTY re-translation via libxkbcommon: engine now keeps its
+    own xkb_state with a US QWERTY keymap and re-evaluates each printable
+    keystroke's hardware keycode through it before keymap.toml lookup, so
+    the IME works correctly on hosts using non-QWERTY system XKB layouts
+    (Canary, Dvorak, Colemak, …). Falls back to original keysym if
+    libxkbcommon initialization fails — QWERTY hosts behave identically.
+  * Engine cosmetic: tray label 신P2 → 한, monochrome icon name.
+
+ -- Bogamie <bogamie02@gmail.com>  Sat, 02 May 2026 02:15:00 +0900
+
 fcitx5-sinsebeolsik-p2 (0.1.1) unstable; urgency=medium
 
   * Bundle setup-fcitx5-trigger.sh as /usr/bin/sinsebeolsik-p2-setup-trigger

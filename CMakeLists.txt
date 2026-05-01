@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 project(sinsebeolsik-p2-fcitx5
-    VERSION 0.1.1
+    VERSION 0.1.2
     DESCRIPTION "Sinsebeolsik P2 Hangul input method for fcitx5"
     LANGUAGES CXX)
 
@@ -19,6 +19,8 @@ include(ECMUninstallTarget)
 find_package(Fcitx5Core 5.0.0 REQUIRED)
 find_package(fmt REQUIRED)
 find_package(Gettext REQUIRED)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(XKBCOMMON REQUIRED IMPORTED_TARGET xkbcommon>=0.5.0)
 
 set(GETTEXT_DOMAIN "fcitx5-sinsebeolsik-p2")
 add_definitions(-DFCITX_GETTEXT_DOMAIN=\"${GETTEXT_DOMAIN}\")

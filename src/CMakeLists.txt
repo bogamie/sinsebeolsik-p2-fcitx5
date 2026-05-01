@@ -27,11 +27,16 @@ add_library(sin3p2_core STATIC
     jamo.cpp
     automaton.cpp
     keymap.cpp
+    qwerty_translator.cpp
     "${CMAKE_CURRENT_BINARY_DIR}/embedded_p2_keymap.cpp"
 )
 target_include_directories(sin3p2_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_compile_features(sin3p2_core PUBLIC cxx_std_20)
-target_link_libraries(sin3p2_core PRIVATE tomlplusplus::tomlplusplus)
+target_link_libraries(sin3p2_core
+    PRIVATE tomlplusplus::tomlplusplus
+    # PUBLIC: STATIC lib이라 consumer(엔진 모듈 + 테스트)도 xkbcommon 심볼 필요.
+    PUBLIC PkgConfig::XKBCOMMON
+)
 # 정적 lib을 SHARED MODULE에 링크하려면 -fPIC 필요
 set_property(TARGET sin3p2_core PROPERTY POSITION_INDEPENDENT_CODE ON)
 

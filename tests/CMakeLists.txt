@@ -27,3 +27,8 @@ add_executable(keymap_test keymap_test.cpp)
 target_link_libraries(keymap_test PRIVATE sin3p2_core Catch2::Catch2WithMain)
 target_compile_features(keymap_test PRIVATE cxx_std_20)
 catch_discover_tests(keymap_test)
+
+add_executable(qwerty_translator_test qwerty_translator_test.cpp)
+target_link_libraries(qwerty_translator_test PRIVATE sin3p2_core Catch2::Catch2WithMain)
+target_compile_features(qwerty_translator_test PRIVATE cxx_std_20)
+catch_discover_tests(qwerty_translator_test)
