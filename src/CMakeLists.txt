@@ -61,3 +61,9 @@ install(FILES "${CMAKE_CURRENT_BINARY_DIR}/sinsebeolsik-p2.conf"
 # 키맵 파일은 사용자 override 가능 위치에 설치. 엔진이 기본적으로 여기서 찾는다.
 install(FILES "${P2_KEYMAP_SOURCE}"
     DESTINATION "${FCITX_INSTALL_PKGDATADIR}/sinsebeolsik-p2")
+
+# Hangul 키를 fcitx5 트리거에 등록하는 헬퍼 스크립트.
+# .deb 사용자는 PATH에 박힌 sinsebeolsik-p2-setup-trigger 한 줄로 끝낼 수 있다.
+install(PROGRAMS "${CMAKE_SOURCE_DIR}/scripts/setup-fcitx5-trigger.sh"
+    DESTINATION "${CMAKE_INSTALL_BINDIR}"
+    RENAME sinsebeolsik-p2-setup-trigger)

@@ -42,6 +42,13 @@ cd sinsebeolsik-p2-fcitx5
 
 ### Hangul 키 트리거 등록 (1회)
 
+`.deb`로 설치한 경우 (v0.1.1+):
+```bash
+sinsebeolsik-p2-setup-trigger
+fcitx5-remote -r
+```
+
+소스에서 빌드한 경우:
 ```bash
 ./scripts/setup-fcitx5-trigger.sh
 fcitx5-remote -r
