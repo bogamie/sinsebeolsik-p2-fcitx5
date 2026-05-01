@@ -370,6 +370,124 @@ TEST_CASE("BS — 빈 state → 빈 결과", "[automaton][backspace]") {
     REQUIRE(b.state.empty());
 }
 
+// ─── BS — 단독 jong (음절 컨텍스트 없음) → 한 번에 클리어 ──────────────────────
+// 빈 state에서 x 키를 누르면 keymap이 jong=SS를 박는다 (단일 키 입력).
+// 사용자 멘탈 모델: 한 키 = 한 BS. 클러스터 분해하지 않고 통째로 제거되어야 함.
+
+TEST_CASE("BS — 단독 jong=SS (x 빈 state) → 1 BS로 클리어",
+          "[automaton][backspace][standalone]") {
+    auto r = run({G(Jong::SS)});
+    REQUIRE(r.preedit == U"ㅆ");
+    REQUIRE(r.committed.empty());
+
+    auto b = backspace(r.final_state);
+    REQUIRE(b.preedit.empty());
+    REQUIRE(b.state.empty());
+}
+
+TEST_CASE("BS — 단독 jong=GG → 1 BS로 클리어",
+          "[automaton][backspace][standalone]") {
+    State s;
+    s.jong = Jong::GG;
+    auto b = backspace(s);
+    REQUIRE(b.preedit.empty());
+    REQUIRE(b.state.empty());
+}
+
+// ─── BS — 단일 키로 박힌 jong=SS는 음절 컨텍스트가 있어도 통째로 제거 ──────
+// keymap이 jong=SS를 한 키 입력으로 직접 박는 경우 (x 키 fallback) BS 한 번에 ㅆ 통째 사라짐.
+// (kfqq처럼 두 키로 합성된 SS와 구분해야 함.)
+
+TEST_CASE("BS — kfx → 갔 → BS → 가 (단일 키 SS 통째 제거)",
+          "[automaton][backspace]") {
+    auto r = run({C(Cho::G), J(Jung::A), G(Jong::SS)});
+    REQUIRE(r.preedit == U"갔");
+
+    auto b = backspace(r.final_state);
+    REQUIRE(b.preedit == U"가");
+}
+
+TEST_CASE("BS — jfx → 았 → BS → 아 (단일 키 SS 통째 제거)",
+          "[automaton][backspace]") {
+    auto r = run({C(Cho::O), J(Jung::A), G(Jong::SS)});
+    REQUIRE(r.preedit == U"았");
+
+    auto b = backspace(r.final_state);
+    REQUIRE(b.preedit == U"아");
+}
+
+TEST_CASE("BS — 두 키로 합성된 SS (kfqq → 갔)는 분해 (갔 → 갓)",
+          "[automaton][backspace][cluster]") {
+    auto r = run({C(Cho::G), J(Jung::A), G(Jong::S), G(Jong::S)});
+    REQUIRE(r.preedit == U"갔");
+
+    auto b = backspace(r.final_state);
+    REQUIRE(b.preedit == U"갓");
+    auto b2 = backspace(b.state);
+    REQUIRE(b2.preedit == U"가");
+}
+
+// ─── BS — 합성 모음 분해 후 가상 복귀 ───────────────────────────────────────
+// joc(가상ㅜ+ㅔ→웨) → BS → '우' (cho=O+가상ㅜ) → c → 웨 복원.
+// 분해 결과의 첫 부분이 ㅗ/ㅜ/ㅡ면 가상 중성으로 환원해야 keymap의 갈마들이가
+// 다음 키에서 재합성을 트리거할 수 있다.
+
+TEST_CASE("BS — joc 후 BS+ㅔ 재합성 → 웨", "[automaton][backspace][virtual]") {
+    auto r = run({C(Cho::O), V(VJung::U), J(Jung::E)});
+    REQUIRE(r.preedit == U"웨");
+
+    auto b = backspace(r.final_state);
+    REQUIRE(b.preedit == U"우");
+
+    // 자동기에 같은 jung을 다시 흘리면 가상+ㅔ → 웨 합성이 일어나야 한다.
+    auto re = step(b.state, J(Jung::E));
+    REQUIRE(re.preedit == U"웨");
+}
+
+TEST_CASE("BS — kVF 후 BS+ㅏ 재합성 → 과", "[automaton][backspace][virtual]") {
+    // 실제+실제 합성으로 만들어진 과도 BS 후 가상으로 복귀해 일관된 재합성 가능.
+    auto r = run({C(Cho::G), J(Jung::O), J(Jung::A)});
+    REQUIRE(r.preedit == U"과");
+
+    auto b = backspace(r.final_state);
+    REQUIRE(b.preedit == U"고");
+
+    auto re = step(b.state, J(Jung::A));
+    REQUIRE(re.preedit == U"과");
+}
+
+TEST_CASE("BS — jGD(의) 후 BS+ㅣ 재합성 → 의", "[automaton][backspace][virtual]") {
+    auto r = run({C(Cho::O), J(Jung::EU), J(Jung::I)});
+    REQUIRE(r.preedit == U"의");
+
+    auto b = backspace(r.final_state);
+    REQUIRE(b.preedit == U"으");
+
+    auto re = step(b.state, J(Jung::I));
+    REQUIRE(re.preedit == U"의");
+}
+
+TEST_CASE("BS — jong 제거가 freeze된 가상을 복귀 (joc→f→BS→c → 웨)",
+          "[automaton][backspace][virtual]") {
+    // joc → 웨 → BS → 우(vjung U) → f(jong=P, vjung freeze) → 웊
+    auto r1 = run({C(Cho::O), V(VJung::U), J(Jung::E)});
+    REQUIRE(r1.preedit == U"웨");
+
+    auto b1 = backspace(r1.final_state);
+    REQUIRE(b1.preedit == U"우");
+
+    auto r2 = step(b1.state, G(Jong::P));
+    REQUIRE(r2.preedit == U"웊");
+
+    // 이 BS는 freeze된 ㅜ를 가상으로 복귀시켜야 한다.
+    auto b2 = backspace(r2.state);
+    REQUIRE(b2.preedit == U"우");
+
+    // c가 매핑하는 jung=E 입력이 가상ㅜ + ㅔ → ㅞ 합성을 다시 일으켜야 함.
+    auto r3 = step(b2.state, J(Jung::E));
+    REQUIRE(r3.preedit == U"웨");
+}
+
 // ─── 쌍자음 (UnitMix CHO) ───────────────────────────────────────────────────
 
 TEST_CASE("쌍자음 — ㄱ ㄱ → ㄲ", "[automaton][double-cho]") {

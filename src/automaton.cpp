@@ -150,6 +150,7 @@ StepResult apply_jong(const State& s, Jong jo) {
     if (s.jong) {
         if (auto cluster = combine_jong(*s.jong, jo)) {
             r.state.jong = *cluster;
+            r.state.jong_combined = true;  // 두 키스트로크가 합쳐짐 → BS는 분해
             freeze_virtual_jung(r.state);
             r.preedit = render(r.state);
             return r;
@@ -158,6 +159,7 @@ StepResult apply_jong(const State& s, Jong jo) {
         r.commit = render(s);
         r.state = State{};
         r.state.jong = jo;
+        r.state.jong_combined = false;
         r.preedit = render(r.state);
         return r;
     }
@@ -165,6 +167,7 @@ StepResult apply_jong(const State& s, Jong jo) {
     // 첫 jong: 가상 중성이 있다면 이 시점에 실제로 정착
     freeze_virtual_jung(r.state);
     r.state.jong = jo;
+    r.state.jong_combined = false;  // 단일 키 입력 → BS는 통째로 제거
     r.preedit = render(r.state);
     return r;
 }
@@ -188,14 +191,43 @@ StepResult backspace(const State& s) {
     r.state = s;
 
     if (s.jong) {
-        if (auto split = split_jong(*s.jong)) {
-            r.state.jong = split->first;
+        // 두 키스트로크가 combine_jong으로 합쳐진 cluster jong만 BS로 분해.
+        // 한 키 입력으로 박힌 jong (단독 jong, 또는 keymap이 jong=SS 같이 직접 cluster
+        // 값을 박은 경우)은 통째로 제거한다 — 한 키 = 한 BS.
+        if (s.jong_combined) {
+            if (auto split = split_jong(*s.jong)) {
+                r.state.jong = split->first;
+                r.state.jong_combined = false;  // 분해 후 남은 jong은 단일 단위
+            } else {
+                // jong_combined=true면 split이 항상 성공하지만 안전장치.
+                r.state.jong = std::nullopt;
+                r.state.jong_combined = false;
+            }
         } else {
             r.state.jong = std::nullopt;
+            r.state.jong_combined = false;
+            // jong 부착 시 freeze된 가상 중성을 BS로 복귀시킨다.
+            // (joc → 웨 → BS → 우(가상ㅜ) → f → 웊(freeze) → BS → 우 → c → 웨)
+            if (auto* rj = std::get_if<Jung>(&r.state.jung)) {
+                switch (*rj) {
+                    case Jung::O:  r.state.jung = VJung::O;  break;
+                    case Jung::U:  r.state.jung = VJung::U;  break;
+                    case Jung::EU: r.state.jung = VJung::EU; break;
+                    default: break;
+                }
+            }
         }
     } else if (auto* rj = std::get_if<Jung>(&s.jung)) {
         if (auto split = split_jung(*rj)) {
-            r.state.jung = split->first;
+            // 합성 모음 분해 — 첫 부분(항상 ㅗ/ㅜ/ㅡ)을 가상 중성으로 복귀시켜
+            // 동일 키 재입력 시 합성이 다시 일어나도록 한다.
+            // (joc → 웨 → BS → cho=O+가상ㅜ → c → 웨)
+            switch (split->first) {
+                case Jung::O:  r.state.jung = VJung::O;  break;
+                case Jung::U:  r.state.jung = VJung::U;  break;
+                case Jung::EU: r.state.jung = VJung::EU; break;
+                default:       r.state.jung = split->first; break;
+            }
         } else {
             r.state.jung = std::monostate{};
         }

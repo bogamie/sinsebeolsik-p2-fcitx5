@@ -28,6 +28,11 @@ struct State {
     // jung 슬롯: 비어있거나 / 일반 Jung / 가상 VJung 중 하나
     std::variant<std::monostate, Jung, VJung> jung;
     std::optional<Jong> jong;
+    // 현재 jong이 두 개의 별도 키스트로크가 combine_jong으로 합쳐진 결과인지.
+    // true → BS는 클러스터 분해 (ㄺ → ㄹ).
+    // false → BS는 통째로 제거 (한 키 = 한 BS).
+    // jong이 nullopt면 의미 없음, false 유지.
+    bool jong_combined = false;
 
     bool empty() const noexcept;
     bool has_jung() const noexcept;
