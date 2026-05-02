@@ -1,3 +1,27 @@
+fcitx5-sinsebeolsik-p2 (0.1.3) unstable; urgency=medium
+
+  * Yet-Hangul ㆍ (araea) input: full automaton support for jung F/FI/FF
+    with conjoining-jamo rendering (precomposed syllables don't exist for
+    these). z key now produces real jung F under D&&!E or virtual ㆍ;
+    Z (shift) unified to jung=F so Z standalone yields ㆍ and jZ yields
+    ᄋᆞ in one syllable. Backspace decomposes FI/FF and restores virtual
+    ㆍ for re-composition.
+  * Wayland compatibility fixes: (1) reset() no longer commits the
+    in-progress syllable — matches fcitx5-hangul policy and avoids
+    stray glyphs at the new cursor on focus changes. (2) Shift detection
+    now reads rawKey().states() instead of normalized key.states() so
+    Wayland's xkb-level modifier consumption doesn't drop the Shift bit
+    before the qwerty translator sees it. (3) Literal-text commits now
+    coalesce flush+literal into a single commitString call to work
+    around Wayland frame coalescing that drops the earlier commit.
+  * Cluster correctness: jong+jong without an in-progress cho no longer
+    cluster (qq=ㅅㅅ now matches the simulator instead of producing ㅆ).
+  * ":" (Shift+;) added as explicit literal so non-QWERTY system layouts
+    (Canary, Dvorak, …) emit ':' regardless of host xkb routing.
+  * README simplified: install-first flow with the .deb path up top.
+
+ -- Bogamie <bogamie02@gmail.com>  Sat, 02 May 2026 18:00:00 +0900
+
 fcitx5-sinsebeolsik-p2 (0.1.2) unstable; urgency=medium
 
   * Backspace polish: preserve single-key jongs, restore frozen virtual
