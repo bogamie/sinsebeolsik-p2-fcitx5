@@ -37,7 +37,9 @@ enum class Cho : uint8_t {
     H = 18,   // ㅎ
 };
 
-// 중성 21종 (현대 한글)
+// 중성 — 0..20은 현대 한글 21종 (compose_syllable이 그대로 쓰는 인덱스).
+// 21..23은 옛한글 자모 — precomposed 음절이 없으므로 conjoining 시퀀스로 출력.
+// is_modern_jung()으로 분기.
 enum class Jung : uint8_t {
     A = 0,    // ㅏ
     AE = 1,   // ㅐ
@@ -60,7 +62,14 @@ enum class Jung : uint8_t {
     EU = 18,  // ㅡ
     EUI = 19, // ㅢ
     I = 20,   // ㅣ
+    F = 21,   // ㆍ (옛한글 아래아)
+    FI = 22,  // ㆎ (아래아 + ㅣ)
+    FF = 23,  // ᆢ (쌍아래아)
 };
+
+constexpr bool is_modern_jung(Jung j) noexcept {
+    return static_cast<uint8_t>(j) < 21;
+}
 
 // 가상 중성 — 신세벌식 P2 갈마들이 단축 입력 전용 중간 상태.
 // `/`, `i`, `o`, `p` 키가 초성-only 상태일 때 박는 임시 jung.
@@ -71,7 +80,7 @@ enum class VJung : uint8_t {
     O = 0,    // virtual ㅗ (501) — / 키
     U = 1,    // virtual ㅜ (502) — o 키
     EU = 2,   // virtual ㅡ (503) — i 키
-    F = 3,    // virtual ㆍ (504, 옛한글 아래아) — p 키 (v1에선 미사용)
+    F = 3,    // virtual ㆍ (504, 옛한글 아래아) — p 키
 };
 
 // 종성 27종 + 없음
@@ -133,13 +142,19 @@ std::optional<std::pair<Jong, Jong>> split_jong(Jong compound);
 // 완성형 한글 음절 (U+AC00 ~ U+D7A3). jong이 None이면 받침 없는 음절.
 char32_t compose_syllable(Cho c, Jung j, Jong jo);
 
-// 호환 자모 (U+3131 ~ U+318F) — 초성/중성/종성 단독 표시용
+// 호환 자모 (U+3131 ~ U+318F) — 초성/중성/종성 단독 표시용.
+// 옛한글 자모 중 호환 자모가 없는 것(예: FF/쌍아래아)은 0 반환 → 호출자가 conjoining으로 폴백.
 char32_t cho_to_compat(Cho c);
 char32_t jung_to_compat(Jung j);
 char32_t jong_to_compat(Jong j);  // Jong::None이면 0 반환
 
+// Conjoining jamo (U+1100 / U+1161 / U+11A8 계열) — 옛한글 음절(precomposed 없음) 합성용.
+// jong_to_conjoining은 Jong::None이면 0 반환.
+char32_t cho_to_conjoining(Cho c);
+char32_t jung_to_conjoining(Jung j);
+char32_t jong_to_conjoining(Jong j);
+
 // 가상 중성 → 일반 중성 (정착 시점에 호출)
-// VJung::F (ㆍ)는 현대 한글에 대응이 없어 nullopt.
 std::optional<Jung> virtual_to_real(VJung v);
 
 }  // namespace sin3p2

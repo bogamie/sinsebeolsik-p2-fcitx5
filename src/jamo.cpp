@@ -28,6 +28,10 @@ std::optional<Jung> combine_jung(Jung a, Jung b) {
         if (b == J::I)  return J::WI;
     } else if (a == J::EU) {
         if (b == J::I)  return J::EUI;
+    } else if (a == J::F) {
+        // 옛한글: F + I → ㆎ, F + F → 쌍아래아
+        if (b == J::I)  return J::FI;
+        if (b == J::F)  return J::FF;
     }
     return std::nullopt;
 }
@@ -49,7 +53,9 @@ std::optional<Jung> combine_virtual_jung(VJung a, Jung b) {
             if (b == J::I)  return J::EUI;
             break;
         case VJung::F:
-            // 옛한글 아래아 합성 — v1 미지원
+            // .ist UnitMix: 504 + I_ → FI, 504 + F_ → FF
+            if (b == J::I) return J::FI;
+            if (b == J::F) return J::FF;
             break;
     }
     return std::nullopt;
@@ -95,6 +101,8 @@ std::optional<std::pair<Jung, Jung>> split_jung(Jung compound) {
         case J::WE:  return std::pair{J::U,  J::E};
         case J::WI:  return std::pair{J::U,  J::I};
         case J::EUI: return std::pair{J::EU, J::I};
+        case J::FI:  return std::pair{J::F,  J::I};
+        case J::FF:  return std::pair{J::F,  J::F};
         default:     return std::nullopt;
     }
 }
@@ -121,7 +129,9 @@ std::optional<std::pair<Jong, Jong>> split_jong(Jong compound) {
 
 // ─── Unicode 변환 ────────────────────────────────────────────────────────────
 
-// 한글 음절 합성 공식: U+AC00 + (cho * 21 + jung) * 28 + jong
+// 한글 음절 합성 공식: U+AC00 + (cho * 21 + jung) * 28 + jong.
+// 호출자는 is_modern_jung(j)가 true임을 보장해야 한다 — 옛한글 자모(F/FI/FF)에는
+// precomposed 음절이 없으므로 conjoining 시퀀스(_to_conjoining 계열)로 직접 조립할 것.
 char32_t compose_syllable(Cho c, Jung j, Jong jo) {
     return 0xAC00u + (static_cast<uint32_t>(c) * 21u
                     + static_cast<uint32_t>(j)) * 28u
@@ -138,8 +148,14 @@ char32_t cho_to_compat(Cho c) {
 }
 
 char32_t jung_to_compat(Jung j) {
-    // ㅏ U+314F .. ㅣ U+3163 — Jung 인덱스와 호환 자모 코드포인트가 1:1 대응
-    return 0x314Fu + static_cast<uint32_t>(j);
+    // 현대 21종은 ㅏ U+314F .. ㅣ U+3163과 인덱스 1:1.
+    // 옛한글: ㆍ U+318D, ㆎ U+318E. FF(쌍아래아)는 호환 자모 없음 → 0.
+    switch (j) {
+        case Jung::F:  return 0x318D;
+        case Jung::FI: return 0x318E;
+        case Jung::FF: return 0;
+        default:       return 0x314Fu + static_cast<uint32_t>(j);
+    }
 }
 
 char32_t jong_to_compat(Jong j) {
@@ -177,12 +193,33 @@ char32_t jong_to_compat(Jong j) {
     return table[static_cast<size_t>(j)];
 }
 
+// Conjoining jamo — 옛한글 음절(precomposed 없음) 조립용. cho U+1100.., jung U+1161..,
+// jong U+11A8.. 가 표준 인덱스. 옛한글 jung은 별도 코드포인트(U+119E/U+11A1/U+11A2).
+char32_t cho_to_conjoining(Cho c) {
+    return 0x1100u + static_cast<uint32_t>(c);
+}
+
+char32_t jung_to_conjoining(Jung j) {
+    switch (j) {
+        case Jung::F:  return 0x119E;
+        case Jung::FI: return 0x11A1;
+        case Jung::FF: return 0x11A2;
+        default:       return 0x1161u + static_cast<uint32_t>(j);
+    }
+}
+
+char32_t jong_to_conjoining(Jong j) {
+    if (j == Jong::None) return 0;
+    // Jong 인덱스 1..27 → U+11A8..U+11C2 (1:1 대응)
+    return 0x11A7u + static_cast<uint32_t>(j);
+}
+
 std::optional<Jung> virtual_to_real(VJung v) {
     switch (v) {
         case VJung::O:  return Jung::O;
         case VJung::U:  return Jung::U;
         case VJung::EU: return Jung::EU;
-        case VJung::F:  return std::nullopt;  // 옛한글 ㆍ — 현대 Jung에 대응 없음
+        case VJung::F:  return Jung::F;
     }
     return std::nullopt;
 }

@@ -174,10 +174,12 @@ void Engine::deactivate(const fcitx::InputMethodEntry &,
 
 void Engine::reset(const fcitx::InputMethodEntry &,
                    fcitx::InputContextEvent &event) {
+    // fcitx5-hangul과 같은 정책: reset은 외부 요인(앱의 명시적 reset, focus
+    // 전환 등)이므로 진행 중 음절을 commit하지 않고 버린다. commit하면 새
+    // 커서/IC 위치에 박혀 사용자 의도와 어긋난다. (deactivate는 사용자가
+    // 의도적으로 IME를 끄는 동작이므로 거기서는 그대로 commit 유지.)
     auto *ic = event.inputContext();
     auto *prop = ic->propertyFor(&factory_);
-    auto r = sin3p2::flush(prop->state);
-    commit_text(ic, r.commit);
     prop->state = sin3p2::State{};
     set_preedit(ic, U"");
 }
@@ -196,9 +198,14 @@ void Engine::keyEvent(const fcitx::InputMethodEntry &,
     // shift+letter 조합이 깨진다 (현재 음절을 미리 commit해버림).
     if (key.isModifier()) return;
 
+    // Wayland frontend는 xkb level 결정에 쓰인 modifier(특히 Shift)를 normalized
+    // key.states()에서 떼어낸다. rawKey().states()는 그 consumed bit까지 보존하므로
+    // shift 검출에 이쪽을 써야 한다. (key.states()로 검출하면 shift+letter가 항상
+    // false로 나와 qwerty_translator가 lowercase로 떨어트림.)
+    const auto modifiers = event.rawKey().states();
+
     // Ctrl/Alt/Super 조합은 자동기에서 처리하지 않고 호스트로 보냄.
     // (단축키 — Ctrl+C, Ctrl+Z 등 — 충돌 방지)
-    const auto modifiers = key.states();
     const bool blocking_mod =
         modifiers.test(fcitx::KeyState::Ctrl) ||
         modifiers.test(fcitx::KeyState::Alt) ||
@@ -257,10 +264,15 @@ void Engine::keyEvent(const fcitx::InputMethodEntry &,
     if (auto* lit = std::get_if<sin3p2::LiteralText>(&*act)) {
         // 기호 layer (.ist의 단순 코드포인트 매핑) — flush + 텍스트 commit.
         // 빈 문자열이면 키 흡수만 (시뮬레이터 빈 슬롯, ex. shift+I/O).
+        //
+        // Wayland input-method-v2: 같은 keyEvent 내 commitString을 두 번 호출하면
+        // 마지막 호출만 host에 반영되는 경우가 있다 (frame coalescing). 진행 중
+        // 음절(flush 결과)과 literal 텍스트를 하나의 commitString으로 합쳐서 박는다.
         auto r = sin3p2::flush(state);
-        commit_text(ic, r.commit);
         state = sin3p2::State{};
-        commit_text(ic, lit->text);
+        std::u32string combined = r.commit;
+        combined += lit->text;
+        commit_text(ic, combined);
         set_preedit(ic, U"");
         event.filterAndAccept();
         return;

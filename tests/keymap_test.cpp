@@ -451,3 +451,44 @@ TEST_CASE("keymap: shift+I/O — 흡수 (빈 텍스트)", "[keymap][symbol]") {
     REQUIRE(visible(run_qwerty(U"kFI")) == U"가");
     REQUIRE(visible(run_qwerty(U"kFO")) == U"가");
 }
+
+// ─── 옛한글 ㆍ (아래아) — 시뮬레이터 검증 (기본 배열) ──────────────────────
+// 시뮬 결과 (2026-05-02): kz=ᄀᆞ jzd=ᄋᆞᇂ jzz=ᄋᆞᆷ jzq=ᄋᆞᆺ jzD=ᄋᆡ jzF=ᄋᆞㅏ jpz=ᄋᆢ
+// .ist 0x7A: D&&!E || E==0x1F8 ? F_ : _M
+
+TEST_CASE("keymap: 아래아 — kz/jzd/jzq", "[keymap][corpus][araea]") {
+    REQUIRE(visible(run_qwerty(U"kz"))  == U"ᄀᆞ");
+    REQUIRE(visible(run_qwerty(U"jzd")) == U"ᄋᆞᇂ");
+    REQUIRE(visible(run_qwerty(U"jzq")) == U"ᄋᆞᆺ");
+}
+
+TEST_CASE("keymap: 아래아 후 z = jong ㅁ — jzz", "[keymap][corpus][araea]") {
+    // jung 채워진 후 두 번째 z는 갈마분기에서 _M으로 떨어짐
+    REQUIRE(visible(run_qwerty(U"jzz")) == U"ᄋᆞᆷ");
+}
+
+TEST_CASE("keymap: FI compound — jzD", "[keymap][corpus][araea][unitmix]") {
+    REQUIRE(visible(run_qwerty(U"jzD")) == U"ᄋᆡ");
+}
+
+TEST_CASE("keymap: F + 합성 안 되는 jung → 음절 break — jzF", "[keymap][corpus][araea]") {
+    REQUIRE(visible(run_qwerty(U"jzF")) == U"ᄋᆞㅏ");
+}
+
+TEST_CASE("keymap: FF compound via 가상 — jpz", "[keymap][corpus][araea][unitmix][virtual]") {
+    REQUIRE(visible(run_qwerty(U"jpz")) == U"ᄋᆢ");
+}
+
+// 시뮬: Z=ㆍ (standalone), jZ=ᄋᆞ (cho 위에 합성). jung=F 한 줄로 두 케이스 모두 커버.
+TEST_CASE("keymap: shift+Z standalone — Z = ㆍ", "[keymap][corpus][araea]") {
+    REQUIRE(visible(run_qwerty(U"Z")) == U"ㆍ");
+}
+
+TEST_CASE("keymap: shift+Z after cho — jZ = ᄋᆞ", "[keymap][corpus][araea]") {
+    REQUIRE(visible(run_qwerty(U"jZ")) == U"ᄋᆞ");
+}
+
+// 시뮬: 빈 상태에서 jong+jong은 cluster 합성 안 됨. qq=ㅅㅅ, ㅆ 아님.
+TEST_CASE("keymap: no-cho 상태 jong+jong은 standalone 누적 — qq = ㅅㅅ", "[keymap][corpus][cluster]") {
+    REQUIRE(visible(run_qwerty(U"qq")) == U"ㅅㅅ");
+}

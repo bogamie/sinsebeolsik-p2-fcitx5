@@ -245,6 +245,9 @@ std::optional<Jung> name_to_jung(std::string_view s) {
     if (s == "EU")  return Jung::EU;
     if (s == "EUI") return Jung::EUI;
     if (s == "I")   return Jung::I;
+    if (s == "F")   return Jung::F;   // 옛한글 ㆍ (아래아)
+    if (s == "FI")  return Jung::FI;  // 옛한글 ㆎ
+    if (s == "FF")  return Jung::FF;  // 옛한글 쌍아래아
     return std::nullopt;
 }
 

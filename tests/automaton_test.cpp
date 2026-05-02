@@ -307,6 +307,13 @@ TEST_CASE("cluster 실패 — 갓 + ㄴ → 갓 + ㄴ standalone", "[automaton][
     REQUIRE(r.preedit == U"ㄴ");
 }
 
+TEST_CASE("cluster 안 함 — cho 없이 ㅅ+ㅅ는 standalone 두 개", "[automaton][cluster]") {
+    // 시뮬: qq=ㅅㅅ. 진행 중 음절이 없는 상태에서 jong이 누적되면 안 됨.
+    auto r = run({G(Jong::S), G(Jong::S)});
+    REQUIRE(r.committed == U"ㅅ");
+    REQUIRE(r.preedit == U"ㅅ");
+}
+
 // ─── BS — 모든 클러스터 분해 ────────────────────────────────────────────────
 
 TEST_CASE("BS — ㄳ → ㄱ", "[automaton][backspace][cluster]") {
@@ -522,4 +529,88 @@ TEST_CASE("vjung U + ㅏ → 합성 안 됨, 우 commit + ㅏ standalone", "[aut
     auto r = run({C(Cho::O), V(VJung::U), J(Jung::A)});
     REQUIRE(r.committed == U"우");
     REQUIRE(r.preedit == U"ㅏ");
+}
+
+// ─── 옛한글 ㆍ (아래아) — 시뮬레이터 검증 ───────────────────────────────────
+// 시뮬 결과 (2026-05-02):
+//   kz=ᄀᆞ  jzd=ᄋᆞᇂ  jzz=ᄋᆞᆷ  jzq=ᄋᆞᆺ
+//   jzD=ᄋᆡ (FI)  jzF=ᄋᆞㅏ (break)  jpz=ᄋᆢ (FF)
+//   jz→BS=ㅇ
+// 옛한글 음절은 precomposed 없음 → conjoining 시퀀스로 출력.
+
+TEST_CASE("아래아 — kz → ᄀᆞ", "[automaton][araea]") {
+    // C(G) + J(F) → cho ㄱ + jung ㆍ
+    auto r = run({C(Cho::G), J(Jung::F)});
+    REQUIRE(r.committed.empty());
+    REQUIRE(r.preedit == U"ᄀᆞ");  // ᄀᆞ
+}
+
+TEST_CASE("아래아 + jong — jzd → ᄋᆞᇂ", "[automaton][araea]") {
+    auto r = run({C(Cho::O), J(Jung::F), G(Jong::H)});
+    REQUIRE(r.committed.empty());
+    REQUIRE(r.preedit == U"ᄋᆞᇂ");  // ᄋᆞᇂ
+}
+
+TEST_CASE("아래아 후 z = jong ㅁ — jzz → ᄋᆞᆷ (keymap path)", "[automaton][araea]") {
+    // 두 번째 z는 keymap이 jong M으로 떨어트림 (jung 채워졌으니).
+    // 자동기 직접 테스트: J(F) 후 G(M).
+    auto r = run({C(Cho::O), J(Jung::F), G(Jong::M)});
+    REQUIRE(r.committed.empty());
+    REQUIRE(r.preedit == U"ᄋᆞᆷ");  // ᄋᆞᆷ
+}
+
+TEST_CASE("아래아 + jong ㅅ — jzq → ᄋᆞᆺ", "[automaton][araea]") {
+    auto r = run({C(Cho::O), J(Jung::F), G(Jong::S)});
+    REQUIRE(r.committed.empty());
+    REQUIRE(r.preedit == U"ᄋᆞᆺ");  // ᄋᆞᆺ
+}
+
+TEST_CASE("FI compound — jzD → ᄋᆡ", "[automaton][araea][unitmix]") {
+    // F + I → FI (ㆎ). combine_jung(F, I)
+    auto r = run({C(Cho::O), J(Jung::F), J(Jung::I)});
+    REQUIRE(r.committed.empty());
+    REQUIRE(r.preedit == U"ᄋᆡ");  // ᄋᆡ
+}
+
+TEST_CASE("F + 합성 안 되는 jung → 음절 break — jzF → ᄋᆞ + ㅏ", "[automaton][araea]") {
+    // combine_jung(F, A)는 nullopt → ᄋᆞ commit + 새 state {jung=A}
+    auto r = run({C(Cho::O), J(Jung::F), J(Jung::A)});
+    REQUIRE(r.committed == U"ᄋᆞ");  // ᄋᆞ
+    REQUIRE(r.preedit == U"ㅏ");                // 호환 자모 standalone
+}
+
+TEST_CASE("FF compound via virtual — jpz → ᄋᆢ", "[automaton][araea][unitmix][virtual]") {
+    // p에서 vF를 박고 z(real F)가 들어오면 combine_virtual_jung(vF, F) → FF
+    auto r = run({C(Cho::O), V(VJung::F), J(Jung::F)});
+    REQUIRE(r.committed.empty());
+    REQUIRE(r.preedit == U"ᄋᆢ");  // ᄋᆢ (쌍아래아)
+}
+
+TEST_CASE("BS — jz → ᄋᆞ → ㅇ", "[automaton][araea][backspace]") {
+    auto r = run({C(Cho::O), J(Jung::F)});
+    REQUIRE(r.preedit == U"ᄋᆞ");
+    auto bs = backspace(r.final_state);
+    REQUIRE(bs.preedit == U"ㅇ");  // 호환 자모 cho-only
+}
+
+TEST_CASE("BS — FI 분해 ᄋᆡ → ᄋᆞ + 가상", "[automaton][araea][backspace]") {
+    // FI → split_jung 분해. split.first=F → VJung::F로 복귀.
+    // 재입력 시 D(=jung I) 다시 받으면 combine_virtual_jung(vF, I) → FI 재합성.
+    auto r = run({C(Cho::O), J(Jung::F), J(Jung::I)});
+    REQUIRE(r.preedit == U"ᄋᆡ");
+    auto bs = backspace(r.final_state);
+    REQUIRE(bs.preedit == U"ᄋᆞ");  // ᄋᆞ — F는 jung_to_compat이 ㆍ로 표시
+    // 가상으로 복귀했는지 확인 — 다시 jung I 입력 시 FI로 합성
+    auto r2 = step(bs.state, J(Jung::I));
+    REQUIRE(r2.preedit == U"ᄋᆡ");  // ᄋᆡ
+}
+
+TEST_CASE("BS — FF 분해 ᄋᆢ → ᄋᆞ + 가상", "[automaton][araea][backspace]") {
+    auto r = run({C(Cho::O), V(VJung::F), J(Jung::F)});
+    REQUIRE(r.preedit == U"ᄋᆢ");
+    auto bs = backspace(r.final_state);
+    REQUIRE(bs.preedit == U"ᄋᆞ");  // ᄋᆞ
+    // 다시 z(real F) 입력 시 FF로 합성
+    auto r2 = step(bs.state, J(Jung::F));
+    REQUIRE(r2.preedit == U"ᄋᆢ");
 }

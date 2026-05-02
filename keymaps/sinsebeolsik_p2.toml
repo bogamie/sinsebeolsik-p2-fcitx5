@@ -192,9 +192,12 @@ rules = [
 
 [[key]]
 key = "z"
-# 옛한글 ㆍ는 v1 미지원 — 갈마 분기는 passthrough로 떨어트린다.
+# .ist: D&&!E || E==0x1F8 ? F_ : _M
+# 초성-only일 때나 가상 ㆍ 위에서 z = real ㆍ(아래아). 그 외엔 ㅁ jong (갈마).
+# real ㆍ 위에서 z를 또 누르면 jung 채워진 상태이므로 (D && !E) false → 종ㅁ.
+# 가상 ㆍ + real ㆍ → combine_virtual_jung으로 쌍아래아(FF) 합성.
 rules = [
-    { when = "(D && !E) || E_v_F", output = { passthrough = true } },
+    { when = "(D && !E) || E_v_F", output = { jung = "F" } },
     { output = { jong = "M" } },                             # ㅁ jong
 ]
 
@@ -284,11 +287,12 @@ rules = [{ output = { jung = "YA" } }]
 key = "X"
 rules = [{ output = { jung = "YO" } }]
 
-# Z (shift) → 옛한글 ㆍ. .ist는 real jung F를 박지만 v1 자동기는 yet-Hangul jung을
-# 합성/조립하지 않는다 → 가시 결과만 맞추기 위해 ㆍ(U+318D) 호환 자모로 commit.
+# Z (shift) → 옛한글 ㆍ (real jung F). 시뮬: Z=ㆍ, jZ=ᄋᆞ.
+# jung=F로 자동기에 박으면 cho 없을 때 호환자모 ㆍ(U+318D), cho 있을 때
+# conjoining 시퀀스(ᄋᆞ)로 render → 두 케이스 모두 시뮬과 일치.
 [[key]]
 key = "Z"
-rules = [{ output = { text = "ㆍ" } }]
+rules = [{ output = { jung = "F" } }]
 
 # ─── 오른손 uppercase = 기호 layer ──────────────────────────────────────────────
 # .ist 0x48..0x5A 단순 코드포인트 매핑. 자동기 state를 flush 후 텍스트 commit.
@@ -344,3 +348,10 @@ rules = [{ output = { text = "" } }]     # 흡수 (.ist 미정의)
 [[key]]
 key = "\""
 rules = [{ output = { text = "/" } }]    # U+002F
+
+# 0x3A (Shift+;) → : literal per .ist (identity 0x3A → 0x3A).
+# Canary 등 비-QWERTY 호스트에서 passthrough하면 호스트 layout이 새서 잘못 박힘 →
+# 명시적 literal commit로 layout 무관하게 ':' 박는다.
+[[key]]
+key = ":"
+rules = [{ output = { text = ":" } }]    # U+003A

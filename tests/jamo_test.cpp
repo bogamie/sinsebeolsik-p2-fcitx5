@@ -138,10 +138,9 @@ TEST_CASE("compatibility jamo conversion", "[jamo][compat]") {
     REQUIRE(jong_to_compat(Jong::H)    == U'ㅎ');
 }
 
-TEST_CASE("virtual_to_real casts modern virtual jungs", "[jamo][virtual]") {
+TEST_CASE("virtual_to_real casts virtual jungs", "[jamo][virtual]") {
     REQUIRE(virtual_to_real(VJung::O)  == Jung::O);
     REQUIRE(virtual_to_real(VJung::U)  == Jung::U);
     REQUIRE(virtual_to_real(VJung::EU) == Jung::EU);
-    // 옛한글 ㆍ는 현대 Jung에 대응 없음
-    REQUIRE_FALSE(virtual_to_real(VJung::F).has_value());
+    REQUIRE(virtual_to_real(VJung::F)  == Jung::F);
 }

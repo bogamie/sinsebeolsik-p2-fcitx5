@@ -24,7 +24,9 @@ bool operator==(const State& a, const State& b) noexcept {
 namespace {
 
 // State를 화면용 문자열로 렌더 (preedit/commit 공용).
-//   cho + (real/virtual) jung [+ jong] 모두 있으면 완성형 음절 한 글자.
+//   cho + (real/virtual) jung [+ jong] 모두 있으면:
+//     - 현대 Jung → 완성형 음절 한 글자 (U+AC00..)
+//     - 옛한글 Jung (F/FI/FF) → conjoining 시퀀스 (precomposed 없음)
 //   부족하면 호환 자모를 이어 붙인 분리 표시.
 //   가상 중성은 표시 시점에 실제로 캐스트.
 std::u32string render(const State& s) {
@@ -35,17 +37,34 @@ std::u32string render(const State& s) {
         jung_view = *rj;
     } else if (auto* vj = std::get_if<VJung>(&s.jung)) {
         jung_view = virtual_to_real(*vj);
-        // VJung::F (옛한글 ㆍ)는 현대 Jung에 대응 없음 → 분리 표시로 떨어짐
     }
 
     if (s.cho && jung_view) {
-        const Jong jo = s.jong.value_or(Jong::None);
-        return std::u32string(1, compose_syllable(*s.cho, *jung_view, jo));
+        if (is_modern_jung(*jung_view)) {
+            const Jong jo = s.jong.value_or(Jong::None);
+            return std::u32string(1, compose_syllable(*s.cho, *jung_view, jo));
+        }
+        // 옛한글: conjoining 시퀀스로 조립
+        std::u32string out;
+        out.push_back(cho_to_conjoining(*s.cho));
+        out.push_back(jung_to_conjoining(*jung_view));
+        if (s.jong) out.push_back(jong_to_conjoining(*s.jong));
+        return out;
     }
 
+    // 부분 음절 — 호환 자모 분리 표시
     std::u32string out;
     if (s.cho)      out.push_back(cho_to_compat(*s.cho));
-    if (jung_view)  out.push_back(jung_to_compat(*jung_view));
+    if (jung_view) {
+        // 호환 자모가 있으면(현대/F/FI) 그대로, 없으면(FF) cho-filler+conjoining으로 폴백
+        const char32_t cp = jung_to_compat(*jung_view);
+        if (cp != 0) {
+            out.push_back(cp);
+        } else {
+            if (!s.cho) out.push_back(0x115F);  // cho filler
+            out.push_back(jung_to_conjoining(*jung_view));
+        }
+    }
     if (s.jong)     out.push_back(jong_to_compat(*s.jong));
     return out;
 }
@@ -146,16 +165,19 @@ StepResult apply_jong(const State& s, Jong jo) {
     StepResult r;
     r.state = s;
 
-    // 클러스터 합성
+    // 클러스터 합성은 진행 중인 음절(cho 있음) 위에서만 — cho 없이 떠 있는
+    // standalone jong은 시뮬상 누적되지 않는다 (qq=ㅅㅅ, ㅆ 아님).
     if (s.jong) {
-        if (auto cluster = combine_jong(*s.jong, jo)) {
-            r.state.jong = *cluster;
-            r.state.jong_combined = true;  // 두 키스트로크가 합쳐짐 → BS는 분해
-            freeze_virtual_jung(r.state);
-            r.preedit = render(r.state);
-            return r;
+        if (s.cho) {
+            if (auto cluster = combine_jong(*s.jong, jo)) {
+                r.state.jong = *cluster;
+                r.state.jong_combined = true;  // 두 키스트로크가 합쳐짐 → BS는 분해
+                freeze_virtual_jung(r.state);
+                r.preedit = render(r.state);
+                return r;
+            }
         }
-        // 클러스터 실패 — commit + standalone jong
+        // 클러스터 불가 (실패 또는 cho 없음) — commit + standalone jong
         r.commit = render(s);
         r.state = State{};
         r.state.jong = jo;
@@ -213,19 +235,22 @@ StepResult backspace(const State& s) {
                     case Jung::O:  r.state.jung = VJung::O;  break;
                     case Jung::U:  r.state.jung = VJung::U;  break;
                     case Jung::EU: r.state.jung = VJung::EU; break;
+                    case Jung::F:  r.state.jung = VJung::F;  break;
                     default: break;
                 }
             }
         }
     } else if (auto* rj = std::get_if<Jung>(&s.jung)) {
         if (auto split = split_jung(*rj)) {
-            // 합성 모음 분해 — 첫 부분(항상 ㅗ/ㅜ/ㅡ)을 가상 중성으로 복귀시켜
+            // 합성 모음 분해 — 첫 부분(ㅗ/ㅜ/ㅡ/옛한글ㆍ)을 가상 중성으로 복귀시켜
             // 동일 키 재입력 시 합성이 다시 일어나도록 한다.
             // (joc → 웨 → BS → cho=O+가상ㅜ → c → 웨)
+            // (jpz → ᄋᆢ(FF) → BS → cho=ㅇ+가상ㆍ → z → ᄋᆢ)
             switch (split->first) {
                 case Jung::O:  r.state.jung = VJung::O;  break;
                 case Jung::U:  r.state.jung = VJung::U;  break;
                 case Jung::EU: r.state.jung = VJung::EU; break;
+                case Jung::F:  r.state.jung = VJung::F;  break;
                 default:       r.state.jung = split->first; break;
             }
         } else {
