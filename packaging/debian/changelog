@@ -1,3 +1,15 @@
+fcitx5-sinsebeolsik-p2 (0.1.4) unstable; urgency=medium
+
+  * Backspace correctness for real-jung syllables: fixed spurious revert to
+    virtual jung when removing a jong from a syllable whose jung was placed
+    directly as a real vowel (e.g. jvf → 옾 → BS now stays at 오 then re-
+    composes to 옾 on next f, instead of collapsing to 와). Tracked via a
+    new jung_was_virtual flag so only freezes that actually happened at
+    apply_jong time get reverted on backspace; jof → 웊 → BS → 우(virtual)
+    → c → 웨 path is unchanged. 178/178 tests.
+
+ -- Bogamie <bogamie02@gmail.com>  Mon, 04 May 2026 00:00:00 +0900
+
 fcitx5-sinsebeolsik-p2 (0.1.3) unstable; urgency=medium
 
   * Yet-Hangul ㆍ (araea) input: full automaton support for jung F/FI/FF
