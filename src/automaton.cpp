@@ -69,13 +69,16 @@ std::u32string render(const State& s) {
     return out;
 }
 
-// 가상 중성이면 실제로 in-place 캐스트 (jong 추가 시점, 클러스터 시점 등에 호출)
-void freeze_virtual_jung(State& s) {
+// 가상 중성이면 실제로 in-place 캐스트 (jong 추가 시점, 클러스터 시점 등에 호출).
+// 실제로 변환됐으면 true 반환 — 호출자가 jung_was_virtual 플래그를 켤 수 있도록.
+bool freeze_virtual_jung(State& s) {
     if (auto* vj = std::get_if<VJung>(&s.jung)) {
         if (auto rj = virtual_to_real(*vj)) {
             s.jung = *rj;
+            return true;
         }
     }
+    return false;
 }
 
 StepResult apply_cho(const State& s, Cho c) {
@@ -103,11 +106,15 @@ StepResult apply_cho(const State& s, Cho c) {
 StepResult apply_jung(const State& s, Jung j) {
     StepResult r;
 
+    // apply_jung이 만드는 jung은 어떤 분기든 fresh freeze가 아니다 — 플래그는 항상 false.
+    // (단순 입력 / real+real 합성 / virtual+real 합성 모두 BS는 split_jung 경로로 처리.)
+
     // 가상 중성 위에 실제 중성이 오면 합성 시도
     if (auto* vj = std::get_if<VJung>(&s.jung)) {
         if (auto compound = combine_virtual_jung(*vj, j)) {
             r.state = s;
             r.state.jung = *compound;
+            r.state.jung_was_virtual = false;
             r.preedit = render(r.state);
             return r;
         }
@@ -126,6 +133,7 @@ StepResult apply_jung(const State& s, Jung j) {
         if (auto compound = combine_jung(*rj, j)) {
             r.state = s;
             r.state.jung = *compound;
+            r.state.jung_was_virtual = false;
             r.preedit = render(r.state);
             return r;
         }
@@ -135,6 +143,7 @@ StepResult apply_jung(const State& s, Jung j) {
     if (!s.has_jung() && !s.jong) {
         r.state = s;
         r.state.jung = j;
+        r.state.jung_was_virtual = false;
         r.preedit = render(r.state);
         return r;
     }
@@ -172,6 +181,8 @@ StepResult apply_jong(const State& s, Jong jo) {
             if (auto cluster = combine_jong(*s.jong, jo)) {
                 r.state.jong = *cluster;
                 r.state.jong_combined = true;  // 두 키스트로크가 합쳐짐 → BS는 분해
+                // 첫 jong 시점에 이미 freeze됐으므로 여기선 보통 no-op.
+                // jung_was_virtual 플래그는 그대로 유지 (BS 통째 제거 시 복귀 신호).
                 freeze_virtual_jung(r.state);
                 r.preedit = render(r.state);
                 return r;
@@ -186,8 +197,12 @@ StepResult apply_jong(const State& s, Jong jo) {
         return r;
     }
 
-    // 첫 jong: 가상 중성이 있다면 이 시점에 실제로 정착
-    freeze_virtual_jung(r.state);
+    // 첫 jong: 가상 중성이 있다면 이 시점에 실제로 정착.
+    // 실제로 freeze가 일어났을 때만 jung_was_virtual=true — BS로 jong 제거 시
+    // real로 박힌 jung(예: jvf의 ㅗ)은 그대로 두고, freeze된 것(예: jof의 ㅜ)만 가상 복귀.
+    if (freeze_virtual_jung(r.state)) {
+        r.state.jung_was_virtual = true;
+    }
     r.state.jong = jo;
     r.state.jong_combined = false;  // 단일 키 입력 → BS는 통째로 제거
     r.preedit = render(r.state);
@@ -228,16 +243,21 @@ StepResult backspace(const State& s) {
         } else {
             r.state.jong = std::nullopt;
             r.state.jong_combined = false;
-            // jong 부착 시 freeze된 가상 중성을 BS로 복귀시킨다.
-            // (joc → 웨 → BS → 우(가상ㅜ) → f → 웊(freeze) → BS → 우 → c → 웨)
-            if (auto* rj = std::get_if<Jung>(&r.state.jung)) {
-                switch (*rj) {
-                    case Jung::O:  r.state.jung = VJung::O;  break;
-                    case Jung::U:  r.state.jung = VJung::U;  break;
-                    case Jung::EU: r.state.jung = VJung::EU; break;
-                    case Jung::F:  r.state.jung = VJung::F;  break;
-                    default: break;
+            // jong 부착 시점에 freeze된 가상 중성만 BS로 복귀시킨다.
+            // freeze 이력은 jung_was_virtual로 추적 — true면 가상으로 환원해 다음 키
+            // 입력이 합성을 다시 트리거할 수 있게 한다.
+            // (jof → 웊 → BS → 우(가상ㅜ) → c → 웨; jvf → 옾 → BS → 오(real) → f → 옾)
+            if (s.jung_was_virtual) {
+                if (auto* rj = std::get_if<Jung>(&r.state.jung)) {
+                    switch (*rj) {
+                        case Jung::O:  r.state.jung = VJung::O;  break;
+                        case Jung::U:  r.state.jung = VJung::U;  break;
+                        case Jung::EU: r.state.jung = VJung::EU; break;
+                        case Jung::F:  r.state.jung = VJung::F;  break;
+                        default: break;
+                    }
                 }
+                r.state.jung_was_virtual = false;
             }
         }
     } else if (auto* rj = std::get_if<Jung>(&s.jung)) {

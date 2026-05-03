@@ -33,6 +33,11 @@ struct State {
     // false → BS는 통째로 제거 (한 키 = 한 BS).
     // jong이 nullopt면 의미 없음, false 유지.
     bool jong_combined = false;
+    // 현재 real jung이 apply_jong 시점에 가상 중성에서 freeze된 결과인지.
+    // true  → BS로 jong 제거 시 가상 중성으로 복귀 (jof→웊→BS→우(가상ㅜ)).
+    // false → BS로 jong 제거 후 real jung 유지 (jvf→옾→BS→오(real ㅗ)).
+    // jung이 real이 아니면 의미 없음, false 유지.
+    bool jung_was_virtual = false;
 
     bool empty() const noexcept;
     bool has_jung() const noexcept;

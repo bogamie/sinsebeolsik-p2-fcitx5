@@ -474,6 +474,35 @@ TEST_CASE("BS — jGD(의) 후 BS+ㅣ 재합성 → 의", "[automaton][backspace
     REQUIRE(re.preedit == U"의");
 }
 
+TEST_CASE("BS — real jung으로 박힌 ㅗ는 jong 제거 후 가상 복귀하지 않음 (jvf→옾→BS→f → 옾)",
+          "[automaton][backspace][virtual]") {
+    // v는 keymap에서 (D&&!E)일 때 real ㅗ를 박는다 — 가상이 아니다.
+    // jong 제거 후에도 real ㅗ로 남아 있어야, 다음 f가 또 ㅍ jong로 떨어진다.
+    // (시뮬레이터 동작: 옾 유지. 버그 수정 전에는 와로 변했음.)
+    auto r1 = run({C(Cho::O), J(Jung::O), G(Jong::P)});
+    REQUIRE(r1.preedit == U"옾");
+
+    auto b = backspace(r1.final_state);
+    REQUIRE(b.preedit == U"오");
+
+    // 이 시점에서 jung은 real Jung::O로 남아 있어야 한다.
+    // 다음 입력은 keymap이 E_v_O false로 보고 jong=P로 떨어뜨림 → 옾 재완성.
+    auto r2 = step(b.state, G(Jong::P));
+    REQUIRE(r2.preedit == U"옾");
+}
+
+TEST_CASE("BS — real jung으로 박힌 ㅜ도 jong 제거 후 가상 복귀하지 않음 (jbf→웊→BS→f → 웊)",
+          "[automaton][backspace][virtual]") {
+    auto r1 = run({C(Cho::O), J(Jung::U), G(Jong::P)});
+    REQUIRE(r1.preedit == U"웊");
+
+    auto b = backspace(r1.final_state);
+    REQUIRE(b.preedit == U"우");
+
+    auto r2 = step(b.state, G(Jong::P));
+    REQUIRE(r2.preedit == U"웊");
+}
+
 TEST_CASE("BS — jong 제거가 freeze된 가상을 복귀 (joc→f→BS→c → 웨)",
           "[automaton][backspace][virtual]") {
     // joc → 웨 → BS → 우(vjung U) → f(jong=P, vjung freeze) → 웊
