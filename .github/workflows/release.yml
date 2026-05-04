@@ -1,0 +1,79 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag to (re)build a .deb for (e.g. v0.1.4)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  deb:
+    name: build .deb and upload to release
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Resolve ref
+        id: ref
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "ref=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
+            echo "tag=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "ref=${GITHUB_REF}" >> "$GITHUB_OUTPUT"
+            echo "tag=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.ref.outputs.ref }}
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            cmake \
+            ninja-build \
+            pkg-config \
+            extra-cmake-modules \
+            gettext \
+            libfmt-dev \
+            libtomlplusplus-dev \
+            libxkbcommon-dev \
+            libfcitx5core-dev \
+            libfcitx5config-dev \
+            libfcitx5utils-dev \
+            devscripts \
+            debhelper \
+            dpkg-dev \
+            rsync
+
+      - name: Build .deb
+        run: ./packaging/build-deb.sh
+
+      - name: Locate .deb
+        id: deb
+        run: |
+          deb="$(ls -1 fcitx5-sinsebeolsik-p2_*_amd64.deb | head -1)"
+          if [[ -z "$deb" ]]; then
+            echo "no .deb produced" >&2
+            exit 1
+          fi
+          echo "path=$deb" >> "$GITHUB_OUTPUT"
+
+      - name: Upload to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="${{ steps.ref.outputs.tag }}"
+          # Create release if it doesn't exist yet (e.g. tag pushed without release)
+          if ! gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$tag" --repo "$GITHUB_REPOSITORY" --title "$tag" --notes ""
+          fi
+          gh release upload "$tag" "${{ steps.deb.outputs.path }}" --repo "$GITHUB_REPOSITORY" --clobber
