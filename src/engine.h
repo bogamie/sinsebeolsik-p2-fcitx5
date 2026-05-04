@@ -22,6 +22,14 @@ namespace sinsebeolsik_p2 {
 class P2InputState final : public fcitx::InputContextProperty {
 public:
     sin3p2::State state{};
+
+    // INT5 (Muhenkan) passthrough modifier — set while INT5 is held by the
+    // host. While true, every other key is forwarded to the host without P2
+    // automaton processing. Keyboards (e.g. ZMK on Totem) wrap a symbol-layer
+    // key with INT5 down/up to bypass P2 jamo capture for `;`, `'`, `/`, `"`.
+    // Reset on activate/deactivate/reset to prevent stuck state across IME
+    // toggles or focus changes that may swallow the release event.
+    bool int5_held = false;
 };
 
 class Engine final : public fcitx::InputMethodEngineV2 {
