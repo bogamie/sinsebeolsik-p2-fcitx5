@@ -157,6 +157,7 @@ void Engine::activate(const fcitx::InputMethodEntry &,
                       fcitx::InputContextEvent &event) {
     auto *prop = event.inputContext()->propertyFor(&factory_);
     prop->state = sin3p2::State{};
+    prop->int5_held = false;
     set_preedit(event.inputContext(), U"");
     P2_DEBUG() << "Sinsebeolsik P2 activated";
 }
@@ -168,6 +169,7 @@ void Engine::deactivate(const fcitx::InputMethodEntry &,
     auto r = sin3p2::flush(prop->state);
     commit_text(ic, r.commit);
     prop->state = sin3p2::State{};
+    prop->int5_held = false;
     set_preedit(ic, U"");
     P2_DEBUG() << "Sinsebeolsik P2 deactivated";
 }
@@ -181,22 +183,54 @@ void Engine::reset(const fcitx::InputMethodEntry &,
     auto *ic = event.inputContext();
     auto *prop = ic->propertyFor(&factory_);
     prop->state = sin3p2::State{};
+    prop->int5_held = false;
     set_preedit(ic, U"");
 }
 
 void Engine::keyEvent(const fcitx::InputMethodEntry &,
                       fcitx::KeyEvent &event) {
-    if (event.isRelease()) return;
-
     auto *ic = event.inputContext();
     auto *prop = ic->propertyFor(&factory_);
     auto &state = prop->state;
     const auto &key = event.key();
 
+    // INT5 (Muhenkan) — passthrough modifier marker.
+    // ZMK가 sim_layer 심볼 키를 INT5 down/up으로 감싸 보내면, 그 동안
+    // 도착하는 모든 키를 P2 자동기에 넘기지 않고 호스트로 통과시킨다.
+    // 이렇게 해야 호스트 XKB가 `;`/`'`/`/`/`"` 같이 P2 keymap이 자모로
+    // 가로채는 글자를 정상적으로 commit할 수 있다.
+    //
+    // press/release 모두 엔진이 흡수 — 호스트가 Muhenkan keysym을 받지
+    // 않게 해 GUI 단축키 트리거를 막는다.
+    //
+    // 첫 press 시 진행 중 음절을 flush: 그렇지 않으면 자동기에 자모가
+    // 남아 있다가 passthrough 키와 commit 순서가 섞여 박힐 수 있다.
+    if (key.sym() == FcitxKey_Muhenkan) {
+        if (event.isRelease()) {
+            prop->int5_held = false;
+        } else {
+            if (!prop->int5_held) {
+                auto r = sin3p2::flush(state);
+                commit_text(ic, r.commit);
+                state = sin3p2::State{};
+                set_preedit(ic, U"");
+            }
+            prop->int5_held = true;
+        }
+        event.filterAndAccept();
+        return;
+    }
+
+    if (event.isRelease()) return;
+
     // Modifier 단독 키 (Shift/Ctrl/Alt/Super 누름 자체) — 무시.
     // 이 KeyEvent를 비-printable로 처리해 flush해버리면 다음에 올
     // shift+letter 조합이 깨진다 (현재 음절을 미리 commit해버림).
     if (key.isModifier()) return;
+
+    // INT5 hold 중 — 자동기를 거치지 않고 호스트로 통과. 자동기 상태는
+    // INT5 첫 press 시 이미 flush되었으므로 여기선 추가 정리 불필요.
+    if (prop->int5_held) return;
 
     // Wayland frontend는 xkb level 결정에 쓰인 modifier(특히 Shift)를 normalized
     // key.states()에서 떼어낸다. rawKey().states()는 그 consumed bit까지 보존하므로
