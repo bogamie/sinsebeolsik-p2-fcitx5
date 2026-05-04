@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 project(sinsebeolsik-p2-fcitx5
-    VERSION 0.1.4
+    VERSION 0.1.5
     DESCRIPTION "Sinsebeolsik P2 Hangul input method for fcitx5"
     LANGUAGES CXX)
 
