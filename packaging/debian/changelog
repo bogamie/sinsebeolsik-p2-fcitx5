@@ -1,3 +1,18 @@
+fcitx5-sinsebeolsik-p2 (0.1.6) unstable; urgency=medium
+
+  * Backspace correctness for doubled choseong: a 쌍자음 formed by
+    combining two keystrokes (ㄱㄱ→ㄲ) was deleted whole on backspace
+    instead of decomposing back to the single consonant. The automaton
+    now tracks whether the current cho was produced by combine_cho via
+    a new cho_combined flag and, on backspace, splits it (ㄲ→ㄱ) only in
+    that case — mirroring the existing jong_combined cluster behavior.
+    A doubled cho planted directly by a single key (keymap-direct GG)
+    is still removed whole, preserving the one-key-one-backspace rule.
+    Adds split_cho to the jamo tables and regression tests for both the
+    two-keystroke decompose and single-key whole-removal paths.
+
+ -- Bogamie <bogamie02@gmail.com>  Fri, 12 Jun 2026 00:00:00 +0900
+
 fcitx5-sinsebeolsik-p2 (0.1.5) unstable; urgency=medium
 
   * INT5 (Muhenkan) passthrough modifier: when the host sends INT5 down,
