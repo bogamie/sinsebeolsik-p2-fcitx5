@@ -25,6 +25,11 @@ namespace sin3p2 {
 // 자동기 상태 — 진행 중인 한 음절
 struct State {
     std::optional<Cho> cho;
+    // 현재 cho가 두 개의 별도 키스트로크가 combine_cho로 합쳐진 쌍자음인지.
+    // true → BS는 쌍자음 분해 (ㄲ → ㄱ).
+    // false → BS는 통째로 제거 (한 키 = 한 BS; keymap이 직접 GG를 박은 경우 포함).
+    // cho가 nullopt면 의미 없음, false 유지.
+    bool cho_combined = false;
     // jung 슬롯: 비어있거나 / 일반 Jung / 가상 VJung 중 하나
     std::variant<std::monostate, Jung, VJung> jung;
     std::optional<Jong> jong;

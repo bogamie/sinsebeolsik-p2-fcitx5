@@ -137,6 +137,9 @@ std::optional<std::pair<Jung, Jung>> split_jung(Jung compound);
 // 클러스터 종성을 두 구성요소로 분해 (ㄺ → ㄹ + ㄱ)
 std::optional<std::pair<Jong, Jong>> split_jong(Jong compound);
 
+// 쌍자음 초성을 두 구성요소로 분해 (ㄲ → ㄱ + ㄱ)
+std::optional<std::pair<Cho, Cho>> split_cho(Cho doubled);
+
 // ─── Unicode 변환 ────────────────────────────────────────────────────────────
 
 // 완성형 한글 음절 (U+AC00 ~ U+D7A3). jong이 None이면 받침 없는 음절.

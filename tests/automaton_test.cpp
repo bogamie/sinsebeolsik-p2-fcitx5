@@ -543,6 +543,41 @@ TEST_CASE("쌍자음 + jung + jong — ㅉㅏㄼ → 짧", "[automaton][double-c
     REQUIRE(r.preedit == U"짧");
 }
 
+// ─── BS — 두 키로 합성된 쌍자음 분해 ────────────────────────────────────────
+// combine_cho로 합쳐진 ㄲ(ㄱㄱ)은 BS 한 번에 ㄱ으로 분해, 다시 BS로 비움.
+// (한 키 = 한 BS 원칙: 두 키스트로크 → 두 BS.)
+
+TEST_CASE("BS — ㄱㄱ→ㄲ → BS → ㄱ → BS → 빈", "[automaton][backspace][double-cho]") {
+    auto r = run({C(Cho::G), C(Cho::G)});
+    REQUIRE(r.preedit == U"ㄲ");
+
+    auto b1 = backspace(r.final_state);
+    REQUIRE(b1.preedit == U"ㄱ");
+
+    auto b2 = backspace(b1.state);
+    REQUIRE(b2.preedit == U"");
+    REQUIRE(b2.state.empty());
+}
+
+TEST_CASE("BS — ㅆ(ㅅㅅ) → BS → ㅅ", "[automaton][backspace][double-cho]") {
+    auto r = run({C(Cho::S), C(Cho::S)});
+    REQUIRE(r.preedit == U"ㅆ");
+
+    auto b = backspace(r.final_state);
+    REQUIRE(b.preedit == U"ㅅ");
+}
+
+// keymap이 한 키로 직접 박은 쌍자음 cho는 BS 한 번에 통째 제거.
+TEST_CASE("BS — 단일 키 ㄲ → BS → 빈 (통째 제거)",
+          "[automaton][backspace][double-cho]") {
+    auto r = run({C(Cho::GG)});
+    REQUIRE(r.preedit == U"ㄲ");
+
+    auto b = backspace(r.final_state);
+    REQUIRE(b.preedit == U"");
+    REQUIRE(b.state.empty());
+}
+
 // ─── 다른 cho 두 번 → 쌍자음 아님, 새 음절 ──────────────────────────────────
 
 TEST_CASE("다른 cho — ㄱ ㄴ → ㄱ commit, ㄴ preedit", "[automaton][boundary]") {
