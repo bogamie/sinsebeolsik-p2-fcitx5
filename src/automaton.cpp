@@ -90,6 +90,7 @@ StepResult apply_cho(const State& s, Cho c) {
         if (auto doubled = combine_cho(*s.cho, c)) {
             r.state = s;
             r.state.cho = *doubled;
+            r.state.cho_combined = true;  // 두 키스트로크가 합쳐짐 → BS는 분해
             r.preedit = render(r.state);
             return r;
         }
@@ -99,6 +100,7 @@ StepResult apply_cho(const State& s, Cho c) {
         r.commit = render(s);
     }
     r.state.cho = c;
+    r.state.cho_combined = false;  // 단일 키 입력 → BS는 통째로 제거
     r.preedit = render(r.state);
     return r;
 }
@@ -279,7 +281,21 @@ StepResult backspace(const State& s) {
     } else if (std::holds_alternative<VJung>(s.jung)) {
         r.state.jung = std::monostate{};
     } else if (s.cho) {
-        r.state.cho = std::nullopt;
+        // combine_cho로 합쳐진 쌍자음(ㄲ←ㄱㄱ)만 BS로 분해. 한 키로 박힌 cho
+        // (단독 cho, 또는 keymap이 직접 GG를 박은 경우)는 통째로 제거 — 한 키 = 한 BS.
+        // (ㄱ→ㄲ→BS→ㄱ→BS→비움)
+        if (s.cho_combined) {
+            if (auto split = split_cho(*s.cho)) {
+                r.state.cho = split->first;
+                r.state.cho_combined = false;  // 분해 후 남은 cho는 단일 단위
+            } else {
+                r.state.cho = std::nullopt;
+                r.state.cho_combined = false;
+            }
+        } else {
+            r.state.cho = std::nullopt;
+            r.state.cho_combined = false;
+        }
     }
     // s.empty() — 호스트 영역 BS로 위임, state 그대로
 

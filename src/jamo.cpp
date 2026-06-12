@@ -127,6 +127,18 @@ std::optional<std::pair<Jong, Jong>> split_jong(Jong compound) {
     }
 }
 
+std::optional<std::pair<Cho, Cho>> split_cho(Cho doubled) {
+    using C = Cho;
+    switch (doubled) {
+        case C::GG: return std::pair{C::G, C::G};
+        case C::DD: return std::pair{C::D, C::D};
+        case C::BB: return std::pair{C::B, C::B};
+        case C::SS: return std::pair{C::S, C::S};
+        case C::JJ: return std::pair{C::J, C::J};
+        default:    return std::nullopt;
+    }
+}
+
 // ─── Unicode 변환 ────────────────────────────────────────────────────────────
 
 // 한글 음절 합성 공식: U+AC00 + (cho * 21 + jung) * 28 + jong.
